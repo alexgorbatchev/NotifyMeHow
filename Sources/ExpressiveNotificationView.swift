@@ -1,8 +1,31 @@
 import Cocoa
 
+private final class CopyNotificationButton: NSButton {
+    var fixedSize: CGFloat = 20
+
+    override var alignmentRectInsets: NSEdgeInsets {
+        NSEdgeInsetsZero
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: fixedSize, height: fixedSize)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+}
+
 /// The native banner surface used by the local NotifyMeHow build.
 final class ExpressiveNotificationView: NSView {
     private var backgroundLayer: CALayer?
+    private let clipboardText: String
+    private let copyButton = CopyNotificationButton()
+    private let defaultCopyIconColor: NSColor
+    private let activeCopyIconColor: NSColor
+    private let defaultBorderColor: NSColor
+    private let iconPointSize: CGFloat
+    private var resetCopyWorkItem: DispatchWorkItem?
 
     init(content: NotificationContent, config: CustomNotificationConfig) {
         let scale = config.scaleFactor
@@ -15,6 +38,12 @@ final class ExpressiveNotificationView: NSView {
         let titleText = content.title.hasPrefix("[slk] ") ? String(content.title.dropFirst(6)) : content.title
         let hasTitle = !config.hideTitle && !titleText.isEmpty
         let textWidth = width - padding * 2
+
+        self.clipboardText = content.clipboardText
+        self.defaultCopyIconColor = config.subtitleColor.withAlphaComponent(1)
+        self.activeCopyIconColor = config.appColor.withAlphaComponent(1)
+        self.defaultBorderColor = config.borderColor
+        self.iconPointSize = 10 * scale
 
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 1))
         wantsLayer = true
@@ -48,56 +77,63 @@ final class ExpressiveNotificationView: NSView {
                                                color: config.subtitleColor, width: textWidth, lines: 2))
         }
 
-        if hasTitle || icon != nil {
-            let header = NSView()
-            header.translatesAutoresizingMaskIntoConstraints = false
-            column.addArrangedSubview(header)
-            header.widthAnchor.constraint(equalToConstant: textWidth).isActive = true
-            var headerHeight: CGFloat = icon == nil ? 0 : 24 * scale
-            let textInset: CGFloat = icon == nil ? 0 : 34 * scale
+        let header = NSView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+        column.addArrangedSubview(header)
+        header.widthAnchor.constraint(equalToConstant: textWidth).isActive = true
+        var headerHeight: CGFloat = max(20 * scale, icon == nil ? 0 : 24 * scale)
+        let textInset: CGFloat = icon == nil ? 0 : 34 * scale
+        let trailingControlsInset: CGFloat = 44 * scale
 
-            if hasTitle {
-                let title = makeLabel(titleText, face: "Bold", size: 20 * scale,
-                                      color: config.titleColor, width: textWidth - textInset - 20 * scale,
-                                      lines: 2)
-                header.addSubview(title)
-                NSLayoutConstraint.activate([
-                    title.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: textInset),
-                    title.centerYAnchor.constraint(equalTo: header.centerYAnchor)
-                ])
-                headerHeight = max(headerHeight, title.fittingSize.height)
-            }
-
-            if let icon {
-                let iconView = NSImageView()
-                iconView.image = icon
-                if icon.isTemplate { iconView.contentTintColor = config.appColor }
-                iconView.imageScaling = .scaleProportionallyUpOrDown
-                iconView.translatesAutoresizingMaskIntoConstraints = false
-                header.addSubview(iconView)
-                NSLayoutConstraint.activate([
-                    iconView.leadingAnchor.constraint(equalTo: header.leadingAnchor),
-                    iconView.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-                    iconView.widthAnchor.constraint(equalToConstant: 24 * scale),
-                    iconView.heightAnchor.constraint(equalTo: iconView.widthAnchor)
-                ])
-            }
-
-            let indicator = NSView()
-            indicator.wantsLayer = true
-            indicator.layer?.backgroundColor = config.appColor.withAlphaComponent(1).cgColor
-            indicator.layer?.cornerRadius = 3 * scale
-            indicator.translatesAutoresizingMaskIntoConstraints = false
-            header.addSubview(indicator)
+        if hasTitle {
+            let title = makeLabel(titleText, face: "Bold", size: 20 * scale,
+                                  color: config.titleColor, width: textWidth - textInset - trailingControlsInset,
+                                  lines: 2)
+            header.addSubview(title)
             NSLayoutConstraint.activate([
-                indicator.trailingAnchor.constraint(equalTo: header.trailingAnchor),
-                indicator.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-                indicator.widthAnchor.constraint(equalToConstant: 6 * scale),
-                indicator.heightAnchor.constraint(equalTo: indicator.widthAnchor),
-                header.heightAnchor.constraint(equalToConstant: headerHeight)
+                title.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: textInset),
+                title.centerYAnchor.constraint(equalTo: header.centerYAnchor)
             ])
-            column.setCustomSpacing(6 * scale, after: header)
+            headerHeight = max(headerHeight, title.fittingSize.height)
         }
+
+        if let icon {
+            let iconView = NSImageView()
+            iconView.image = icon
+            if icon.isTemplate { iconView.contentTintColor = config.appColor }
+            iconView.imageScaling = .scaleProportionallyUpOrDown
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            header.addSubview(iconView)
+            NSLayoutConstraint.activate([
+                iconView.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+                iconView.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+                iconView.widthAnchor.constraint(equalToConstant: 24 * scale),
+                iconView.heightAnchor.constraint(equalTo: iconView.widthAnchor)
+            ])
+        }
+
+        let indicator = NSView()
+        indicator.wantsLayer = true
+        indicator.layer?.backgroundColor = config.appColor.withAlphaComponent(1).cgColor
+        indicator.layer?.cornerRadius = 3 * scale
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(indicator)
+
+        configureCopyButton(scale: scale)
+        header.addSubview(copyButton)
+
+        NSLayoutConstraint.activate([
+            indicator.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            indicator.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            indicator.widthAnchor.constraint(equalToConstant: 6 * scale),
+            indicator.heightAnchor.constraint(equalTo: indicator.widthAnchor),
+            copyButton.trailingAnchor.constraint(equalTo: indicator.leadingAnchor, constant: -8 * scale),
+            copyButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            copyButton.widthAnchor.constraint(equalToConstant: 20 * scale),
+            copyButton.heightAnchor.constraint(equalTo: copyButton.widthAnchor),
+            header.heightAnchor.constraint(equalToConstant: headerHeight)
+        ])
+        column.setCustomSpacing(6 * scale, after: header)
 
         if !config.hideText && !content.subtitle.isEmpty {
             let context = makeLabel(content.subtitle, face: "Medium", size: 10 * scale,
@@ -131,6 +167,54 @@ final class ExpressiveNotificationView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("ExpressiveNotificationView is created programmatically")
+    }
+
+    private func configureCopyButton(scale: CGFloat) {
+        copyButton.fixedSize = 20 * scale
+        copyButton.isBordered = false
+        copyButton.title = ""
+        copyButton.imagePosition = .imageOnly
+        copyButton.imageScaling = .scaleProportionallyDown
+        copyButton.wantsLayer = true
+        copyButton.layer?.cornerRadius = 5 * scale
+        copyButton.layer?.backgroundColor = defaultBorderColor.withAlphaComponent(0.45).cgColor
+        copyButton.layer?.borderWidth = 0.5 * scale
+        copyButton.layer?.borderColor = defaultBorderColor.cgColor
+        copyButton.toolTip = "Copy notification to clipboard"
+        copyButton.setAccessibilityLabel("Copy notification")
+        copyButton.target = self
+        copyButton.action = #selector(copyToClipboard)
+        copyButton.translatesAutoresizingMaskIntoConstraints = false
+        setCopyButtonSymbol("doc.on.doc", weight: .medium, tint: defaultCopyIconColor)
+    }
+
+    private func setCopyButtonSymbol(_ name: String, weight: NSFont.Weight, tint: NSColor) {
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: iconPointSize, weight: weight)
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: "Copy notification")?
+            .withSymbolConfiguration(symbolConfig)
+        image?.isTemplate = true
+        copyButton.image = image
+        copyButton.contentTintColor = tint
+    }
+
+    @objc func copyToClipboard() {
+        guard !clipboardText.isEmpty else { return }
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(clipboardText, forType: .string)
+
+        resetCopyWorkItem?.cancel()
+        setCopyButtonSymbol("checkmark", weight: .bold, tint: activeCopyIconColor)
+        copyButton.layer?.borderColor = activeCopyIconColor.cgColor
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.setCopyButtonSymbol("doc.on.doc", weight: .medium, tint: self.defaultCopyIconColor)
+            self.copyButton.layer?.borderColor = self.defaultBorderColor.cgColor
+        }
+        resetCopyWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
     }
 
     private func makeLabel(_ text: String, face: String, size: CGFloat, color: NSColor,

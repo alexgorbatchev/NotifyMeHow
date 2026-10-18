@@ -631,4 +631,50 @@ final class LogicTests: XCTestCase {
         let muchLaterTime = baseTime.addingTimeInterval(120)
         XCTAssertTrue(monitor.shouldProcessNotification(identifier: "id-0", content: content, now: muchLaterTime))
     }
+
+    // MARK: - NotificationContent Clipboard Formatting Tests
+
+    func testClipboardTextStripsSlkPrefixAndJoinsNonEmptyFields() {
+        var content = NotificationContent()
+        content.title = "[slk] Alex (#general)"
+        content.subtitle = ""
+        content.body = "Ship the release"
+
+        XCTAssertEqual(content.clipboardText, "Alex (#general)\nShip the release")
+    }
+
+    func testClipboardTextIncludesSubtitleWhenPresent() {
+        var content = NotificationContent()
+        content.title = "Calendar"
+        content.subtitle = "In 5 minutes"
+        content.body = "Design review"
+
+        XCTAssertEqual(content.clipboardText, "Calendar\nIn 5 minutes\nDesign review")
+    }
+
+    func testExpressiveNotificationViewCopyButtonActionWritesToPasteboard() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let fontsDir = repoRoot.appendingPathComponent("Resources/Fonts")
+        for face in ["Regular", "Medium", "Bold"] {
+            let fontURL = fontsDir.appendingPathComponent("MapleMonoNormal-NF-\(face).ttf")
+            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+        }
+
+        var content = NotificationContent()
+        content.title = "[slk] Envoy (#agorbatchev-test)"
+        content.body = "Clipboard action verification payload"
+
+        let config = CustomNotificationConfig()
+        let view = ExpressiveNotificationView(content: content, config: config)
+
+        NSPasteboard.general.clearContents()
+        view.copyToClipboard()
+
+        XCTAssertEqual(
+            NSPasteboard.general.string(forType: .string),
+            "Envoy (#agorbatchev-test)\nClipboard action verification payload"
+        )
+    }
 }

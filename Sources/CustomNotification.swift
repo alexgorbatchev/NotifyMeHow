@@ -42,6 +42,14 @@ struct NotificationContent {
     var body: String = ""
     var appIcon: NSImage? = nil      // App icon from bundle
     var profileImage: NSImage? = nil  // Profile/contact image if available
+
+    var clipboardText: String {
+        let cleanedTitle = title.hasPrefix("[slk] ") ? String(title.dropFirst(6)) : title
+        return [cleanedTitle, subtitle, body]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
 }
 
 /// Manages custom notification windows
