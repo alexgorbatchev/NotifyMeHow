@@ -1,75 +1,29 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Creates a macOS app bundle from the built executable
 
-set -e
+set -euo pipefail
 
 APP_NAME="NotifyMeHow"
-BUILD_DIR=".build/debug"
-APP_DIR="${APP_NAME}.app"
+CONFIG="${1:-release}"
+APP_DIR="${2:-${APP_NAME}.app}"
 
-echo "Building ${APP_NAME}..."
-swift build
+echo "Building ${APP_NAME} (${CONFIG})..."
+swift build -c "${CONFIG}"
+BIN_DIR="$(swift build -c "${CONFIG}" --show-bin-path)"
 
-echo "Creating app bundle..."
-# Only create directories if they don't exist (preserve permissions)
+echo "Creating app bundle at ${APP_DIR}..."
 mkdir -p "${APP_DIR}/Contents/MacOS"
-mkdir -p "${APP_DIR}/Contents/Resources"
+mkdir -p "${APP_DIR}/Contents/Resources/Fonts"
 
-# Copy executable (overwrite only the binary)
-cp -f "${BUILD_DIR}/${APP_NAME}" "${APP_DIR}/Contents/MacOS/"
+cp -f "${BIN_DIR}/${APP_NAME}" "${APP_DIR}/Contents/MacOS/${APP_NAME}"
+chmod +x "${APP_DIR}/Contents/MacOS/${APP_NAME}"
 
-# Copy resources (icons)
-cp -f "Resources/AppIcon.icns" "${APP_DIR}/Contents/Resources/" 2>/dev/null || true
-cp -f "Resources/MenuBarIcon.png" "${APP_DIR}/Contents/Resources/" 2>/dev/null || true
-cp -f "Resources/MenuBarIcon@2x.png" "${APP_DIR}/Contents/Resources/" 2>/dev/null || true
+cp -f "Resources/Info.plist" "${APP_DIR}/Contents/Info.plist"
+cp -f "Resources/AppIcon.icns" "${APP_DIR}/Contents/Resources/"
+cp -f "Resources/MenuBarIcon.png" "${APP_DIR}/Contents/Resources/"
+cp -f "Resources/MenuBarIcon@2x.png" "${APP_DIR}/Contents/Resources/"
+cp -f Resources/Fonts/* "${APP_DIR}/Contents/Resources/Fonts/"
 
-# Create Info.plist
-cat > "${APP_DIR}/Contents/Info.plist" << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleName</key>
-    <string>NotifyMeHow</string>
-    <key>CFBundleDisplayName</key>
-    <string>NotifyMeHow</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.motleywoods.NotifyMeHow</string>
-    <key>CFBundleVersion</key>
-    <string>0.1.0</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.1</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleExecutable</key>
-    <string>NotifyMeHow</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.utilities</string>
-    <key>NSAccessibilityUsageDescription</key>
-    <string>NotifyMeHow needs accessibility permissions to detect and reposition notifications on your screen.</string>
-</dict>
-</plist>
-EOF
+codesign --force --deep --sign - "${APP_DIR}"
 
-# Add codesign for accessibility permissions to work properly
-codesign -s - --force --deep "${APP_DIR}"
-
-echo ""
 echo "App bundle created: ${APP_DIR}"
-echo ""
-echo "To run the GUI app:"
-echo "  open ${APP_DIR}"
-echo ""
-echo "To run the CLI version:"
-echo "  .build/debug/NotifyMeHow --help"
-echo ""
-echo "Note: You'll need to grant Accessibility permissions in:"
-echo "  System Settings > Privacy & Security > Accessibility"

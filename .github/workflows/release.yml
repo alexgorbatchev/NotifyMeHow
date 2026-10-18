@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish macOS arm64 release
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift test
+
+      - name: Package release archive
+        id: package
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          stage_dir="${RUNNER_TEMP}/stage"
+          mkdir -p "$stage_dir"
+          app_bundle_path="${stage_dir}/NotifyMeHow.app"
+          asset_basename="NotifyMeHow-${TAG}-darwin-arm64"
+          archive_path="${RUNNER_TEMP}/${asset_basename}.tar.gz"
+          checksum_path="${RUNNER_TEMP}/${asset_basename}.sha256"
+
+          ./create-app.sh release "$app_bundle_path"
+          "${app_bundle_path}/Contents/MacOS/NotifyMeHow" --help
+
+          tar -czf "$archive_path" -C "$stage_dir" NotifyMeHow.app
+          (cd "${RUNNER_TEMP}" && shasum -a 256 "${asset_basename}.tar.gz" > "$checksum_path")
+
+          echo "archive_path=$archive_path" >> "$GITHUB_OUTPUT"
+          echo "checksum_path=$checksum_path" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          ARCHIVE_PATH: ${{ steps.package.outputs.archive_path }}
+          CHECKSUM_PATH: ${{ steps.package.outputs.checksum_path }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARCHIVE_PATH" "$CHECKSUM_PATH" --clobber
+          else
+            gh release create "$TAG" "$ARCHIVE_PATH" "$CHECKSUM_PATH" \
+              --verify-tag \
+              --title "$TAG" \
+              --generate-notes
+          fi
