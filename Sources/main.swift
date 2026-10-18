@@ -327,7 +327,7 @@ func testHideNotifications() {
         return
     }
 
-    guard let pid = getNotificationCenterPID() else {
+    guard getNotificationCenterPID() != nil else {
         print("ERROR: NotificationCenter process not found")
         return
     }

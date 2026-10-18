@@ -6,7 +6,7 @@ import UserNotifications
 let appVersion = "0.2"
 
 /// GitHub repository for update checks
-let githubRepo = "mbinde/NotifyMeHow"
+let githubRepo = "alexgorbatchev/NotifyMeHow"
 
 /// Menu bar application for NotifyMeHow
 class MenuBarApp: NSObject, NSApplicationDelegate {
