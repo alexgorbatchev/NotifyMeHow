@@ -567,4 +567,68 @@ final class LogicTests: XCTestCase {
         // If not set, should default to something > 0
         XCTAssertGreaterThan(history.retentionMinutes, 0)
     }
+
+    // MARK: - NotificationMonitor Deduplication Tests
+
+    func testPersistentAlertWithSameIdentifierIsNeverReprocessedAfterDedupeWindow() {
+        let monitor = NotificationMonitor()
+        var alert = NotificationContent()
+        alert.appName = "DiskArbitrationAgent"
+        alert.title = "Disk Not Ejected Properly"
+        alert.body = "Eject “4TB” before disconnecting or turning it off."
+
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertTrue(monitor.shouldProcessNotification(identifier: "alert-uuid-1", content: alert, now: t0))
+
+        // 30 seconds later (well past the time-based dedupe window), the same alert is still in NotificationCenter
+        let t1 = t0.addingTimeInterval(30)
+        XCTAssertFalse(
+            monitor.shouldProcessNotification(identifier: "alert-uuid-1", content: alert, now: t1),
+            "Persistent alert with the same AXIdentifier must not re-trigger after dedupeWindow expires"
+        )
+    }
+
+    func testNewNotificationWithSameTextButNewIdentifierAfterDedupeWindowIsProcessed() {
+        let monitor = NotificationMonitor()
+        var msg = NotificationContent()
+        msg.appName = "Slack"
+        msg.title = "[slk] Alex"
+        msg.body = "ok"
+
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertTrue(monitor.shouldProcessNotification(identifier: "msg-uuid-1", content: msg, now: t0))
+
+        // Within 10s dedupe window, even a different UUID with identical text is suppressed
+        let t1 = t0.addingTimeInterval(5)
+        XCTAssertFalse(monitor.shouldProcessNotification(identifier: "msg-uuid-2", content: msg, now: t1))
+
+        // After 10s dedupe window, a new notification with a new UUID and same text IS processed
+        let t2 = t0.addingTimeInterval(15)
+        XCTAssertTrue(monitor.shouldProcessNotification(identifier: "msg-uuid-3", content: msg, now: t2))
+    }
+
+    func testSeenBannersEvictsOldestWhenExceedingCapacity() {
+        let monitor = NotificationMonitor()
+        var content = NotificationContent()
+        content.appName = "Test"
+        let baseTime = Date(timeIntervalSince1970: 1_000_000)
+
+        for i in 0..<500 {
+            content.title = "Title \(i)"
+            XCTAssertTrue(monitor.shouldProcessNotification(identifier: "id-\(i)", content: content, now: baseTime))
+        }
+
+        // id-0 is still in seenBanners at 500 items
+        content.title = "Title 0"
+        let laterTime = baseTime.addingTimeInterval(60)
+        XCTAssertFalse(monitor.shouldProcessNotification(identifier: "id-0", content: content, now: laterTime))
+
+        // Adding 501st item evicts id-0
+        content.title = "Title 500"
+        XCTAssertTrue(monitor.shouldProcessNotification(identifier: "id-500", content: content, now: laterTime))
+
+        content.title = "Title 0"
+        let muchLaterTime = baseTime.addingTimeInterval(120)
+        XCTAssertTrue(monitor.shouldProcessNotification(identifier: "id-0", content: content, now: muchLaterTime))
+    }
 }

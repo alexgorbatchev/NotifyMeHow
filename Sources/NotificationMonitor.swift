@@ -47,6 +47,8 @@ class NotificationMonitor {
     private var showCustomNotification: Bool = false
     private var customConfig: CustomNotificationConfig?
     private var seenBanners: Set<String> = []  // Track banners we've already processed
+    private var seenBannerOrder: [String] = [] // Bounded FIFO queue to prevent memory growth
+    private let maxSeenBanners = 500
 
     // Cached initial notification data for relative positioning
     private var cachedInitialPosition: CGPoint?
@@ -56,7 +58,7 @@ class NotificationMonitor {
 
     // Track recently shown notifications to avoid duplicates but allow different content
     private var recentNotifications: [(content: String, time: Date)] = []
-    private let dedupeWindow: TimeInterval = 2.0  // Ignore exact duplicates within 2 seconds
+    private let dedupeWindow: TimeInterval = 10.0  // Ignore exact duplicates within 10 seconds
 
     init(position: NotificationPosition = .bottomRight, scaleFactor: CGFloat = 1.0) {
         self.targetPosition = position
@@ -201,10 +203,16 @@ class NotificationMonitor {
 
     /// Move notification using relative positioning on the window
     private func repositionNotificationWindow(_ window: AXUIElement) {
-        // Find the banner container within the window
-        let targetSubroles = ["AXNotificationCenterBanner", "AXNotificationCenterAlert"]
+        let bannerContainers = findAllBannerContainers(in: window)
+        guard !bannerContainers.isEmpty else { return }
+
+        for bannerContainer in bannerContainers {
+            processBannerContainer(bannerContainer, in: window)
+        }
+    }
+
+    private func processBannerContainer(_ bannerContainer: AXUIElement, in window: AXUIElement) {
         guard let windowSize = getSize(of: window),
-              let bannerContainer = findElementWithSubrole(window, targetSubroles: targetSubroles),
               let notifSize = getSize(of: bannerContainer),
               let position = getPosition(of: bannerContainer) else {
             return
@@ -241,63 +249,152 @@ class NotificationMonitor {
         // Show custom notification based on rules (always check, regardless of position)
         let content = CustomNotificationManager.shared.extractContent(from: bannerContainer)
         if !content.title.isEmpty || !content.body.isEmpty {
-            // Create a content hash for deduplication
-            let contentHash = "\(content.appName)|\(content.title)|\(content.subtitle)|\(content.body)"
-            let now = Date()
+            let identifier = getElementIdentifier(bannerContainer)
 
-            // Clean up old entries
-            recentNotifications.removeAll { now.timeIntervalSince($0.time) > dedupeWindow }
+            guard shouldProcessNotification(identifier: identifier, content: content) else {
+                // If this is an already-seen notification and style requests hiding, ensure system notification is dismissed
+                if let style = RulesManager.shared.styleFor(content: content), style.hideSystemNotification {
+                    dismissSystemNotification(bannerContainer)
+                }
+                return
+            }
 
-            // Check if we've recently shown this exact notification
-            let isDuplicate = recentNotifications.contains { $0.content == contentHash }
+            // Record notification for history (used by Recent tab)
+            NotificationHistory.shared.record(content)
 
-            if !isDuplicate {
-                // Record notification for history (used by Recent tab)
-                NotificationHistory.shared.record(content)
-                recentNotifications.append((content: contentHash, time: now))
+            if let style = RulesManager.shared.styleFor(content: content) {
+                let config = style.toConfig()
+                CustomNotificationManager.shared.configure(config)
+                CustomNotificationManager.shared.showNotification(content: content)
 
-                if let style = RulesManager.shared.styleFor(content: content) {
-                    let config = style.toConfig()
-                    CustomNotificationManager.shared.configure(config)
-                    CustomNotificationManager.shared.showNotification(content: content)
-
-                    // Hide system notification if style requests it
-                    if style.hideSystemNotification {
-                        hideSystemNotification(window)
-                    }
+                // Hide system notification by dismissing it cleanly
+                if style.hideSystemNotification {
+                    hideSystemNotification(bannerContainer, window: window)
                 }
             }
         }
     }
 
-    /// Move system notification off-screen to hide it
-    private func hideSystemNotification(_ window: AXUIElement) {
-        // Move window way off screen (negative coordinates)
-        var point = CGPoint(x: -5000, y: -5000)
-        if let value = AXValueCreate(.cgPoint, &point) {
-            AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value)
+    /// Determine whether a notification should be processed or skipped as a duplicate.
+    /// Records the notification in `seenBanners` and `recentNotifications` if accepted.
+    func shouldProcessNotification(identifier: String?, content: NotificationContent, now: Date = Date()) -> Bool {
+        guard !content.title.isEmpty || !content.body.isEmpty else {
+            return false
+        }
+
+        if let id = identifier, !id.isEmpty {
+            if seenBanners.contains(id) {
+                return false
+            }
+        }
+
+        let contentHash = "\(content.appName)|\(content.title)|\(content.subtitle)|\(content.body)"
+
+        // Clean up old entries
+        recentNotifications.removeAll { now.timeIntervalSince($0.time) > dedupeWindow }
+
+        // Check if we've recently shown this exact notification
+        if recentNotifications.contains(where: { $0.content == contentHash }) {
+            if let id = identifier, !id.isEmpty {
+                recordSeenBanner(id)
+            }
+            return false
+        }
+
+        if let id = identifier, !id.isEmpty {
+            recordSeenBanner(id)
+        }
+        recentNotifications.append((content: contentHash, time: now))
+        return true
+    }
+
+    private func recordSeenBanner(_ id: String) {
+        seenBanners.insert(id)
+        seenBannerOrder.append(id)
+        if seenBannerOrder.count > maxSeenBanners {
+            let oldest = seenBannerOrder.removeFirst()
+            seenBanners.remove(oldest)
         }
     }
 
-    private func findElementWithSubrole(_ root: AXUIElement, targetSubroles: [String]) -> AXUIElement? {
+    /// Extract AXIdentifier string from element
+    private func getElementIdentifier(_ element: AXUIElement) -> String? {
+        var idRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, "AXIdentifier" as CFString, &idRef) == .success,
+           let id = idRef as? String, !id.isEmpty {
+            return id
+        }
+        return nil
+    }
+
+    /// Cleanly dismiss a system notification banner or alert
+    @discardableResult
+    private func dismissSystemNotification(_ banner: AXUIElement) -> Bool {
+        var actionsRef: CFArray?
+        if AXUIElementCopyActionNames(banner, &actionsRef) == .success,
+           let actions = actionsRef as? [String] {
+            if let closeAction = actions.first(where: { $0.contains("Close") || $0 == "AXCancel" }) {
+                if AXUIElementPerformAction(banner, closeAction as CFString) == .success {
+                    return true
+                }
+            }
+        }
+        if let children = getChildren(of: banner) {
+            for child in children {
+                if getRole(of: child) == "AXButton" {
+                    if getSubrole(of: child) == "AXCloseButton" || getTitle(of: child) == "Close" {
+                        if AXUIElementPerformAction(child, kAXPressAction as CFString) == .success {
+                            return true
+                        }
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    /// Hide system notification by moving the banner off-screen instantly and dismissing it cleanly
+    private func hideSystemNotification(_ banner: AXUIElement, window: AXUIElement) {
+        // Move the banner itself off-screen so it disappears instantly without waiting for fade-out
+        var point = CGPoint(x: -5000, y: -5000)
+        if let value = AXValueCreate(.cgPoint, &point) {
+            let setBannerRes = AXUIElementSetAttributeValue(banner, kAXPositionAttribute as CFString, value)
+            if setBannerRes != .success {
+                // Fallback only if moving the banner failed
+                AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value)
+            }
+        }
+
+        // Cleanly dismiss the notification from NotificationCenter
+        dismissSystemNotification(banner)
+    }
+
+    private func findAllBannerContainers(in root: AXUIElement, maxDepth: Int = 6) -> [AXUIElement] {
+        var results: [AXUIElement] = []
+        let targetSubroles = [
+            "AXNotificationCenterBanner",
+            "AXNotificationCenterBannerWindow",
+            "AXNotificationCenterAlert",
+            "AXNotificationCenterNotification"
+        ]
+
         var subroleRef: CFTypeRef?
         if AXUIElementCopyAttributeValue(root, kAXSubroleAttribute as CFString, &subroleRef) == .success,
            let subrole = subroleRef as? String, targetSubroles.contains(subrole) {
-            return root
+            results.append(root)
+            return results
         }
+
+        guard maxDepth > 0 else { return results }
 
         var childrenRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(root, kAXChildrenAttribute as CFString, &childrenRef) == .success,
-              let children = childrenRef as? [AXUIElement] else {
-            return nil
-        }
-
-        for child in children {
-            if let found = findElementWithSubrole(child, targetSubroles: targetSubroles) {
-                return found
+        if AXUIElementCopyAttributeValue(root, kAXChildrenAttribute as CFString, &childrenRef) == .success,
+           let children = childrenRef as? [AXUIElement] {
+            for child in children {
+                results.append(contentsOf: findAllBannerContainers(in: child, maxDepth: maxDepth - 1))
             }
         }
-        return nil
+        return results
     }
 
     private func cacheInitialNotificationData(windowSize: CGSize, notifSize: CGSize, position: CGPoint) {
@@ -363,6 +460,13 @@ class NotificationMonitor {
         // Get all NotificationCenter windows and reposition them using the same method as new notifications
         let windows = getNotificationWindows()
         for window in windows {
+            // Restore window if it was left off-screen by a previous session
+            if let pos = getPosition(of: window), pos.x <= -1000 || pos.y <= -1000 {
+                var origin = CGPoint.zero
+                if let val = AXValueCreate(.cgPoint, &origin) {
+                    AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, val)
+                }
+            }
             repositionNotificationWindow(window)
         }
     }
