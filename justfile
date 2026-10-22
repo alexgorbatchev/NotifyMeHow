@@ -13,8 +13,13 @@ test:
     swift test
 
 # Rebuild, then replace any running NotifyMeHow with the local build using notifymehow.local.json
-run: build quit apply-local-config
+run: build quit reset-permissions apply-local-config
     open {{ app }}
+
+# Clear NotifyMeHow's Accessibility permission so the next launch asks again. Each ad-hoc
+# signed build is trusted per binary, so a grant for a previous build no longer applies.
+reset-permissions:
+    tccutil reset Accessibility {{ bundle_id }}
 
 # Quit any running NotifyMeHow (installed or local build) and wait for it to exit
 quit:
