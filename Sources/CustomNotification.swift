@@ -13,6 +13,11 @@ enum BannerBackground: String {
         if #available(macOS 26.0, *) { return true }
         return false
     }
+
+    /// Glass banners sharpen from a blur as they fade in and blur again as they fade out.
+    var usesBlurTransition: Bool {
+        return isAvailableGlass
+    }
 }
 
 /// Configuration for custom notification appearance
@@ -75,9 +80,15 @@ class CustomNotificationManager {
     static let shared = CustomNotificationManager()
 
     private static let reflowDuration: TimeInterval = 0.25
+    private static let fadeDuration: TimeInterval = 0.3
+    /// Blur radius glass banner content starts from when fading in and ends at when fading out.
+    private static let transitionBlurRadius: CGFloat = 12
+    private static let transitionBlurFilterName = "transitionBlur"
 
     private var activeWindows: [NSWindow] = []
     private var windowConfigs: [NSWindow: CustomNotificationConfig] = [:]
+    /// The banner content of each window, which the blur transition is applied to
+    private var bannerViews: [NSWindow: NSView] = [:]
     private var config = CustomNotificationConfig()
 
     func configure(_ config: CustomNotificationConfig) {
@@ -228,10 +239,16 @@ class CustomNotificationManager {
             window.alphaValue = 0
             window.orderFrontRegardless()
 
+            let bannerView = self.bannerViews[window]
+            if config.background.usesBlurTransition, let bannerView {
+                self.animateBlur(of: bannerView, from: Self.transitionBlurRadius, to: 0)
+            }
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.3
+                context.duration = Self.fadeDuration
                 window.animator().alphaValue = config.opacity
             } completionHandler: { [weak self] in
+                // A zero-radius blur still costs a Core Image pass, so drop the filter once sharp
+                bannerView?.contentFilters = []
                 // Start animation after fade-in completes
                 self?.startAnimation(for: window, config: config)
             }
@@ -297,19 +314,41 @@ class CustomNotificationManager {
     }
 
     private func dismissNotification(_ window: NSWindow) {
+        if windowConfigs[window]?.background.usesBlurTransition == true, let bannerView = bannerViews[window] {
+            animateBlur(of: bannerView, from: 0, to: Self.transitionBlurRadius)
+        }
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.3
+            context.duration = Self.fadeDuration
             window.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             window.orderOut(nil)
             self?.activeWindows.removeAll { $0 == window }
             self?.windowConfigs.removeValue(forKey: window)
+            self?.bannerViews.removeValue(forKey: window)
             if let self {
                 for remainingWindow in self.activeWindows {
                     self.positionWindow(remainingWindow, animated: true)
                 }
             }
         })
+    }
+
+    /// Animates a Gaussian blur on the banner content, in step with the window fade.
+    private func animateBlur(of view: NSView, from startRadius: CGFloat, to endRadius: CGFloat) {
+        guard let blur = CIFilter(name: "CIGaussianBlur") else { return }
+        blur.name = Self.transitionBlurFilterName
+        blur.setValue(endRadius, forKey: kCIInputRadiusKey)
+
+        view.wantsLayer = true
+        view.layerUsesCoreImageFilters = true
+        view.contentFilters = [blur]
+
+        let animation = CABasicAnimation(keyPath: "filters.\(Self.transitionBlurFilterName).inputRadius")
+        animation.fromValue = startRadius
+        animation.toValue = endRadius
+        animation.duration = Self.fadeDuration
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        view.layer?.add(animation, forKey: Self.transitionBlurFilterName)
     }
 
     private func createNotificationWindow(content: NotificationContent, config: CustomNotificationConfig) -> NSWindow {
@@ -343,6 +382,7 @@ class CustomNotificationManager {
             window.contentView = contentView
         }
         contentView.frame = window.contentView!.bounds
+        bannerViews[window] = contentView
 
         return window
     }

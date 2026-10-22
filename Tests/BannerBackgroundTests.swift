@@ -30,6 +30,16 @@ final class BannerBackgroundTests: XCTestCase {
         XCTAssertEqual(style.toConfig().background, .solid)
     }
 
+    func testOnlyGlassBannersBlurWhileFading() {
+        XCTAssertFalse(BannerBackground.solid.usesBlurTransition)
+        if #available(macOS 26.0, *) {
+            XCTAssertTrue(BannerBackground.glass.usesBlurTransition)
+            XCTAssertTrue(BannerBackground.clearGlass.usesBlurTransition)
+        } else {
+            XCTAssertFalse(BannerBackground.glass.usesBlurTransition)
+        }
+    }
+
     func testDerivedStylesInheritTheBackground() {
         var base = NotificationStyle(name: "Base")
         base.background = "glass"
