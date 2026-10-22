@@ -83,7 +83,7 @@ final class ExpressiveNotificationView: NSView {
         header.widthAnchor.constraint(equalToConstant: textWidth).isActive = true
         var headerHeight: CGFloat = max(20 * scale, icon == nil ? 0 : 24 * scale)
         let textInset: CGFloat = icon == nil ? 0 : 34 * scale
-        let trailingControlsInset: CGFloat = 44 * scale
+        let trailingControlsInset: CGFloat = 28 * scale
 
         if hasTitle {
             let title = makeLabel(titleText, face: "Bold", size: config.titleFontSize * scale,
@@ -112,22 +112,11 @@ final class ExpressiveNotificationView: NSView {
             ])
         }
 
-        let indicator = NSView()
-        indicator.wantsLayer = true
-        indicator.layer?.backgroundColor = config.appColor.withAlphaComponent(1).cgColor
-        indicator.layer?.cornerRadius = 3 * scale
-        indicator.translatesAutoresizingMaskIntoConstraints = false
-        header.addSubview(indicator)
-
         configureCopyButton(scale: scale)
         header.addSubview(copyButton)
 
         NSLayoutConstraint.activate([
-            indicator.trailingAnchor.constraint(equalTo: header.trailingAnchor),
-            indicator.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            indicator.widthAnchor.constraint(equalToConstant: 6 * scale),
-            indicator.heightAnchor.constraint(equalTo: indicator.widthAnchor),
-            copyButton.trailingAnchor.constraint(equalTo: indicator.leadingAnchor, constant: -8 * scale),
+            copyButton.trailingAnchor.constraint(equalTo: header.trailingAnchor),
             copyButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             copyButton.widthAnchor.constraint(equalToConstant: 20 * scale),
             copyButton.heightAnchor.constraint(equalTo: copyButton.widthAnchor),
