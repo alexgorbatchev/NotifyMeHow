@@ -31,6 +31,7 @@ struct CustomNotificationConfig {
     var titleFontSize: CGFloat = 20
     var subtitleFontSize: CGFloat = 10
     var bodyFontSize: CGFloat = 12
+    var iconSize: CGFloat = 24
     var cornerRadius: CGFloat = 14
     var padding: CGFloat = 20
     var width: CGFloat = 420

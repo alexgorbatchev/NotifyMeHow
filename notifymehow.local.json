@@ -10,6 +10,8 @@
   },
   "styles": [
     {
+      "id": "5B1A6F0E-2C1D-4E8A-9B47-3D2F6C8A1E50",
+      "name": "Base (Maple Signal)",
       "offsetX": 0,
       "position": "bottomCenter",
       "hideText": false,
@@ -17,8 +19,6 @@
       "subtitleColorHex": "929EAF",
       "borderWidth": 0.5,
       "showAppName": false,
-      "name": "Default Notifications (Maple Signal)",
-      "id": "b824ef78-4389-4a91-9c60-843d4187f551",
       "borderColorHex": "303641",
       "hideSystemNotification": true,
       "bodyColorHex": "C0C7D2",
@@ -34,20 +34,26 @@
       "animation": "none",
       "hideIcon": false,
       "dwellTime": 10,
-      "width": 480,
-      "padding": 20,
-      "cornerRadius": 14,
+      "width": 460,
+      "padding": 13,
+      "cornerRadius": 22,
       "titleFontSize": 14,
-      "subtitleFontSize": 10,
-      "bodyFontSize": 12,
+      "subtitleFontSize": 13,
+      "bodyFontSize": 13,
       "hasShadow": true,
       "background": "glass",
-      "glassTintOpacity": 0
+      "glassTintOpacity": 0,
+      "iconSize": 32
+    },
+    {
+      "id": "b824ef78-4389-4a91-9c60-843d4187f551",
+      "name": "Default Notifications (Maple Signal)",
+      "baseStyleId": "5B1A6F0E-2C1D-4E8A-9B47-3D2F6C8A1E50"
     },
     {
       "id": "7a35d94e-28b7-4b72-91f8-038e89fce90a",
       "name": "slk Notifications (Maple Signal)",
-      "baseStyleId": "b824ef78-4389-4a91-9c60-843d4187f551",
+      "baseStyleId": "5B1A6F0E-2C1D-4E8A-9B47-3D2F6C8A1E50",
       "customIconPath": "~/.config/notifymehow/slack.png",
       "appColorHex": "85B8D5"
     }

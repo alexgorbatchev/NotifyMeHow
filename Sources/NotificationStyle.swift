@@ -33,6 +33,7 @@ struct NotificationStyle: Codable, Identifiable {
     var titleFontSize: Double = 20
     var subtitleFontSize: Double = 10
     var bodyFontSize: Double = 12
+    var iconSize: Double = 24
     var hasShadow: Bool = true
     var background: String = "solid"             // Banner background: solid, glass, clearGlass
     var glassTintOpacity: Double = 0             // How strongly glass is tinted toward backgroundColorHex (0-1)
@@ -49,7 +50,7 @@ struct NotificationStyle: Codable, Identifiable {
         case customIconPath, backgroundImagePath, showAppName
         case borderWidth, borderColorHex, animation, animationLoops
         case hideSystemNotification, hideIcon, hideTitle, hideText
-        case width, padding, cornerRadius, titleFontSize, subtitleFontSize, bodyFontSize, hasShadow
+        case width, padding, cornerRadius, titleFontSize, subtitleFontSize, bodyFontSize, iconSize, hasShadow
         case background, glassTintOpacity
         case baseStyleId
     }
@@ -97,6 +98,7 @@ struct NotificationStyle: Codable, Identifiable {
         titleFontSize = try container.decodeIfPresent(Double.self, forKey: .titleFontSize) ?? 20
         subtitleFontSize = try container.decodeIfPresent(Double.self, forKey: .subtitleFontSize) ?? 10
         bodyFontSize = try container.decodeIfPresent(Double.self, forKey: .bodyFontSize) ?? 12
+        iconSize = try container.decodeIfPresent(Double.self, forKey: .iconSize) ?? 24
         hasShadow = try container.decodeIfPresent(Bool.self, forKey: .hasShadow) ?? true
         background = try container.decodeIfPresent(String.self, forKey: .background) ?? "solid"
         glassTintOpacity = try container.decodeIfPresent(Double.self, forKey: .glassTintOpacity) ?? 0
@@ -151,7 +153,7 @@ struct NotificationStyle: Codable, Identifiable {
         field(.hideTitle, \.hideTitle), field(.hideText, \.hideText),
         field(.width, \.width), field(.padding, \.padding), field(.cornerRadius, \.cornerRadius),
         field(.titleFontSize, \.titleFontSize), field(.subtitleFontSize, \.subtitleFontSize),
-        field(.bodyFontSize, \.bodyFontSize), field(.hasShadow, \.hasShadow),
+        field(.bodyFontSize, \.bodyFontSize), field(.iconSize, \.iconSize), field(.hasShadow, \.hasShadow),
         field(.background, \.background), field(.glassTintOpacity, \.glassTintOpacity)
     ]
 
@@ -246,6 +248,7 @@ struct NotificationStyle: Codable, Identifiable {
         config.titleFontSize = CGFloat(titleFontSize)
         config.subtitleFontSize = CGFloat(subtitleFontSize)
         config.bodyFontSize = CGFloat(bodyFontSize)
+        config.iconSize = CGFloat(iconSize)
         config.hasShadow = hasShadow
         config.background = BannerBackground(rawValue: background) ?? .solid
         config.glassTintOpacity = CGFloat(glassTintOpacity)

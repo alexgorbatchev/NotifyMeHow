@@ -29,15 +29,13 @@ final class ExpressiveNotificationView: NSView {
 
     init(content: NotificationContent, config: CustomNotificationConfig) {
         let scale = config.scaleFactor
-        let width = config.width * scale
-        let padding = config.padding * scale
         let icon = config.hideIcon ? nil : config.customIcon ?? content.profileImage ?? content.appIcon
             ?? NSImage(systemSymbolName: "bell.fill", accessibilityDescription: "Notification")
+        let metrics = BannerMetrics(config: config, hasIcon: icon != nil)
         let hasAppName = config.showAppName && !content.appName.isEmpty
         // Keep slk's transport marker for rule matching, but omit it from the banner.
         let titleText = content.title.hasPrefix("[slk] ") ? String(content.title.dropFirst(6)) : content.title
         let hasTitle = !config.hideTitle && !titleText.isEmpty
-        let textWidth = width - padding * 2
 
         self.clipboardText = content.clipboardText
         self.defaultCopyIconColor = config.subtitleColor.withAlphaComponent(1)
@@ -45,9 +43,9 @@ final class ExpressiveNotificationView: NSView {
         self.defaultBorderColor = config.borderColor
         self.iconPointSize = 10 * scale
 
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 1))
+        super.init(frame: NSRect(x: 0, y: 0, width: metrics.width, height: 1))
         wantsLayer = true
-        layer?.cornerRadius = config.cornerRadius * scale
+        layer?.cornerRadius = metrics.cornerRadius
         layer?.masksToBounds = true
         // Over glass the banner stays transparent so the glass effect shows through
         layer?.backgroundColor = config.background.isAvailableGlass
@@ -66,38 +64,46 @@ final class ExpressiveNotificationView: NSView {
             backgroundLayer = background
         }
 
+        // Text column beside the icon, tightly spaced like a macOS notification
         let column = NSStackView()
         column.orientation = .vertical
         column.alignment = .leading
-        column.spacing = 6 * scale
+        column.spacing = metrics.lineSpacing
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
-        column.widthAnchor.constraint(equalToConstant: textWidth).isActive = true
 
         if hasAppName {
-            column.addArrangedSubview(makeLabel(content.appName.uppercased(), face: "Medium", size: 9 * scale,
-                                               color: config.subtitleColor, width: textWidth, lines: 2))
+            column.addArrangedSubview(makeLabel(content.appName.uppercased(), face: "Medium",
+                                                size: config.subtitleFontSize * scale,
+                                                color: config.subtitleColor, width: metrics.textWidth, lines: 1))
         }
-
-        let header = NSView()
-        header.translatesAutoresizingMaskIntoConstraints = false
-        column.addArrangedSubview(header)
-        header.widthAnchor.constraint(equalToConstant: textWidth).isActive = true
-        var headerHeight: CGFloat = max(20 * scale, icon == nil ? 0 : 24 * scale)
-        let textInset: CGFloat = icon == nil ? 0 : 34 * scale
-        let trailingControlsInset: CGFloat = 28 * scale
-
         if hasTitle {
-            let title = makeLabel(titleText, face: "Bold", size: config.titleFontSize * scale,
-                                  color: config.titleColor, width: textWidth - textInset - trailingControlsInset,
-                                  lines: 2)
-            header.addSubview(title)
-            NSLayoutConstraint.activate([
-                title.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: textInset),
-                title.centerYAnchor.constraint(equalTo: header.centerYAnchor)
-            ])
-            headerHeight = max(headerHeight, title.fittingSize.height)
+            column.addArrangedSubview(makeLabel(titleText, face: "Bold", size: config.titleFontSize * scale,
+                                                color: config.titleColor, width: metrics.textWidth, lines: 2))
         }
+        if !config.hideText && !content.subtitle.isEmpty {
+            column.addArrangedSubview(makeLabel(content.subtitle, face: "Bold",
+                                                size: config.subtitleFontSize * scale,
+                                                color: config.subtitleColor, width: metrics.textWidth, lines: 2))
+        }
+        if !config.hideText && !content.body.isEmpty {
+            var body = content.body
+            if config.maxBodyCharacters > 0 && body.count > config.maxBodyCharacters {
+                body = String(body.prefix(config.maxBodyCharacters - 1)) + "…"
+            }
+            column.addArrangedSubview(makeLabel(body, face: "Regular", size: config.bodyFontSize * scale,
+                                                color: config.bodyColor, width: metrics.textWidth,
+                                                lines: config.maxBodyLines))
+        }
+
+        let columnHeight = column.fittingSize.height
+        frame.size.height = max(metrics.minimumHeight, columnHeight + metrics.padding * 2)
+        NSLayoutConstraint.activate([
+            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: metrics.textLeading),
+            column.widthAnchor.constraint(equalToConstant: metrics.textWidth),
+            // Short text is centered against the icon; taller text starts at the top padding
+            column.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
 
         if let icon {
             let iconView = NSImageView()
@@ -105,51 +111,22 @@ final class ExpressiveNotificationView: NSView {
             if icon.isTemplate { iconView.contentTintColor = config.appColor }
             iconView.imageScaling = .scaleProportionallyUpOrDown
             iconView.translatesAutoresizingMaskIntoConstraints = false
-            header.addSubview(iconView)
+            addSubview(iconView)
             NSLayoutConstraint.activate([
-                iconView.leadingAnchor.constraint(equalTo: header.leadingAnchor),
-                iconView.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-                iconView.widthAnchor.constraint(equalToConstant: 24 * scale),
+                iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: metrics.padding),
+                iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+                iconView.widthAnchor.constraint(equalToConstant: metrics.iconSize),
                 iconView.heightAnchor.constraint(equalTo: iconView.widthAnchor)
             ])
         }
 
         configureCopyButton(scale: scale)
-        header.addSubview(copyButton)
-
+        addSubview(copyButton)
         NSLayoutConstraint.activate([
-            copyButton.trailingAnchor.constraint(equalTo: header.trailingAnchor),
-            copyButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            copyButton.widthAnchor.constraint(equalToConstant: 20 * scale),
-            copyButton.heightAnchor.constraint(equalTo: copyButton.widthAnchor),
-            header.heightAnchor.constraint(equalToConstant: headerHeight)
-        ])
-        column.setCustomSpacing(6 * scale, after: header)
-
-        if !config.hideText && !content.subtitle.isEmpty {
-            let context = makeLabel(content.subtitle, face: "Medium", size: config.subtitleFontSize * scale,
-                                    color: config.subtitleColor, width: textWidth, lines: 2)
-            column.addArrangedSubview(context)
-        }
-
-        if !config.hideText && !content.body.isEmpty {
-            if let preceding = column.arrangedSubviews.last {
-                column.setCustomSpacing(12 * scale, after: preceding)
-            }
-
-            var body = content.body
-            if config.maxBodyCharacters > 0 && body.count > config.maxBodyCharacters {
-                body = String(body.prefix(config.maxBodyCharacters - 1)) + "…"
-            }
-            column.addArrangedSubview(makeLabel(body, face: "Regular", size: config.bodyFontSize * scale,
-                                               color: config.bodyColor, width: textWidth,
-                                               lines: config.maxBodyLines))
-        }
-
-        frame.size.height = max(64 * scale, column.fittingSize.height + padding * 2)
-        NSLayoutConstraint.activate([
-            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
-            column.topAnchor.constraint(equalTo: topAnchor, constant: padding)
+            copyButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -metrics.padding),
+            copyButton.topAnchor.constraint(equalTo: topAnchor, constant: metrics.padding),
+            copyButton.widthAnchor.constraint(equalToConstant: metrics.copyButtonSize),
+            copyButton.heightAnchor.constraint(equalTo: copyButton.widthAnchor)
         ])
 
         layoutSubtreeIfNeeded()

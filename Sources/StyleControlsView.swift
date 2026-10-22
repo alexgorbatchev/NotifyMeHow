@@ -28,6 +28,7 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
     private var subtitleFontSizeField: NSTextField!
     private var bodyFontSizeField: NSTextField!
     private var shadowCheckbox: NSButton!
+    private var iconSizeField: NSTextField!
     private var opacitySlider: NSSlider!
     private var opacityLabel: NSTextField!
     private var dwellSlider: NSSlider!
@@ -346,6 +347,8 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         clearBgButton.frame = NSRect(x: padding + 273, y: y, width: 45, height: 22)
         addSubview(clearBgButton)
 
+        iconSizeField = addNumberField(label: "Size:", labelWidth: 35, x: padding, y: y, minimum: 8)
+
         // ═══════════════════════════════════════════════════════════════
         // SECTION: Effects
         // ═══════════════════════════════════════════════════════════════
@@ -461,6 +464,7 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         titleFontSizeField.doubleValue = style.titleFontSize
         subtitleFontSizeField.doubleValue = style.subtitleFontSize
         bodyFontSizeField.doubleValue = style.bodyFontSize
+        iconSizeField.doubleValue = style.iconSize
         shadowCheckbox.state = style.hasShadow ? .on : .off
         backgroundPopup.selectItem(at: Self.backgroundOptions.firstIndex { $0.value == style.background } ?? 0)
         glassTintSlider.doubleValue = style.glassTintOpacity
@@ -528,6 +532,7 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         style.titleFontSize = titleFontSizeField.doubleValue
         style.subtitleFontSize = subtitleFontSizeField.doubleValue
         style.bodyFontSize = bodyFontSizeField.doubleValue
+        style.iconSize = iconSizeField.doubleValue
         style.hasShadow = shadowCheckbox.state == .on
         style.background = Self.backgroundOptions[max(0, backgroundPopup.indexOfSelectedItem)].value
         style.glassTintOpacity = glassTintSlider.doubleValue
