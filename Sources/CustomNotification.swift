@@ -8,12 +8,14 @@ struct CustomNotificationConfig {
     var titleColor: NSColor = .white
     var subtitleColor: NSColor = NSColor.white.withAlphaComponent(0.8)
     var bodyColor: NSColor = NSColor.white.withAlphaComponent(0.7)
-    var titleFontSize: CGFloat = 16
-    var subtitleFontSize: CGFloat = 13
-    var bodyFontSize: CGFloat = 13
-    var cornerRadius: CGFloat = 12
-    var padding: CGFloat = 10
-    var width: CGFloat = 380
+    // Banner metrics in points before scaleFactor is applied.
+    var titleFontSize: CGFloat = 20
+    var subtitleFontSize: CGFloat = 10
+    var bodyFontSize: CGFloat = 12
+    var cornerRadius: CGFloat = 14
+    var padding: CGFloat = 20
+    var width: CGFloat = 420
+    var hasShadow: Bool = true
     var maxHeight: CGFloat = 200
     var opacity: CGFloat = 1.0
     var dwellTime: TimeInterval = 5.0  // How long to show before auto-dismiss
@@ -55,6 +57,8 @@ struct NotificationContent {
 /// Manages custom notification windows
 class CustomNotificationManager {
     static let shared = CustomNotificationManager()
+
+    private static let reflowDuration: TimeInterval = 0.25
 
     private var activeWindows: [NSWindow] = []
     private var windowConfigs: [NSWindow: CustomNotificationConfig] = [:]
@@ -286,7 +290,7 @@ class CustomNotificationManager {
             self?.windowConfigs.removeValue(forKey: window)
             if let self {
                 for remainingWindow in self.activeWindows {
-                    self.positionWindow(remainingWindow)
+                    self.positionWindow(remainingWindow, animated: true)
                 }
             }
         })
@@ -305,7 +309,7 @@ class CustomNotificationManager {
             defer: false
         )
 
-        window.hasShadow = true
+        window.hasShadow = config.hasShadow
         window.isReleasedWhenClosed = false
         window.isOpaque = false
         window.backgroundColor = .clear
@@ -317,62 +321,26 @@ class CustomNotificationManager {
         return window
     }
 
-    private func positionWindow(_ window: NSWindow) {
+    /// Places a banner in the stack; `animated` slides it when the stack reflows.
+    private func positionWindow(_ window: NSWindow, animated: Bool = false) {
         guard let screen = NSScreen.main, let config = windowConfigs[window] else { return }
-        let screenFrame = screen.visibleFrame
-        let windowFrame = window.frame
-
-        var x: CGFloat
-        var y: CGFloat
-
-        // Horizontal position
-        switch config.position.corner {
-        case .topRight, .middleRight, .bottomRight:
-            x = screenFrame.maxX - windowFrame.width - config.position.offsetX
-        case .topLeft, .middleLeft, .bottomLeft:
-            x = screenFrame.minX + config.position.offsetX
-        case .topCenter, .center, .bottomCenter:
-            x = screenFrame.midX - windowFrame.width / 2
-        }
-
-        // Vertical position
-        switch config.position.corner {
-        case .topLeft, .topCenter, .topRight:
-            y = screenFrame.maxY - windowFrame.height - config.position.offsetY
-        case .middleLeft, .center, .middleRight:
-            y = screenFrame.midY - windowFrame.height / 2
-        case .bottomLeft, .bottomCenter, .bottomRight:
-            y = screenFrame.minY + config.position.offsetY
-        }
-
-        // Stack multiple notifications
         let precedingWindows = activeWindows.prefix { $0 !== window }
-        let gap: CGFloat = 16
-        var stackOffset = precedingWindows.reduce(CGFloat.zero) { $0 + $1.frame.height + gap }
-        // Centered banners start relative to their own height; adjust to the first
-        // banner's top edge so mixed-height windows retain the same visible gap.
-        switch config.position.corner {
-        case .middleLeft, .center, .middleRight:
-            if let firstWindow = activeWindows.first {
-                stackOffset += (windowFrame.height - firstWindow.frame.height) / 2
-            }
-        default:
-            break
-        }
-        switch config.position.corner {
-        case .topLeft, .topCenter, .topRight:
-            y -= stackOffset
-        case .bottomLeft, .bottomCenter, .bottomRight:
-            y += stackOffset
-        case .middleLeft, .center, .middleRight:
-            y -= stackOffset
-        }
+        let origin = NotificationStackLayout.origin(
+            for: window.frame.size,
+            position: config.position,
+            screenFrame: screen.visibleFrame,
+            precedingHeights: precedingWindows.map { $0.frame.height },
+            firstHeight: activeWindows.first?.frame.height
+        )
 
-        // Clamp to screen bounds to prevent off-screen notifications
-        // (e.g., when importing settings from a different screen size)
-        x = max(screenFrame.minX, min(x, screenFrame.maxX - windowFrame.width))
-        y = max(screenFrame.minY, min(y, screenFrame.maxY - windowFrame.height))
-
-        window.setFrameOrigin(CGPoint(x: x, y: y))
+        guard animated else {
+            window.setFrameOrigin(origin)
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.reflowDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            window.animator().setFrameOrigin(origin)
+        }
     }
 }

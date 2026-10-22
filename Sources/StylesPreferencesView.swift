@@ -258,7 +258,7 @@ class StyleEditorWindowController: NSWindowController {
         self.onSave = onSave
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 696),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false

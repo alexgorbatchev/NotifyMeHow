@@ -29,8 +29,8 @@ final class ExpressiveNotificationView: NSView {
 
     init(content: NotificationContent, config: CustomNotificationConfig) {
         let scale = config.scaleFactor
-        let width = 420 * scale
-        let padding = 20 * scale
+        let width = config.width * scale
+        let padding = config.padding * scale
         let icon = config.hideIcon ? nil : config.customIcon ?? content.profileImage ?? content.appIcon
             ?? NSImage(systemSymbolName: "bell.fill", accessibilityDescription: "Notification")
         let hasAppName = config.showAppName && !content.appName.isEmpty
@@ -47,7 +47,7 @@ final class ExpressiveNotificationView: NSView {
 
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 1))
         wantsLayer = true
-        layer?.cornerRadius = 14 * scale
+        layer?.cornerRadius = config.cornerRadius * scale
         layer?.masksToBounds = true
         layer?.backgroundColor = config.backgroundColor.withAlphaComponent(1).cgColor
         layer?.borderWidth = config.borderWidth * scale
@@ -86,7 +86,7 @@ final class ExpressiveNotificationView: NSView {
         let trailingControlsInset: CGFloat = 44 * scale
 
         if hasTitle {
-            let title = makeLabel(titleText, face: "Bold", size: 20 * scale,
+            let title = makeLabel(titleText, face: "Bold", size: config.titleFontSize * scale,
                                   color: config.titleColor, width: textWidth - textInset - trailingControlsInset,
                                   lines: 2)
             header.addSubview(title)
@@ -136,7 +136,7 @@ final class ExpressiveNotificationView: NSView {
         column.setCustomSpacing(6 * scale, after: header)
 
         if !config.hideText && !content.subtitle.isEmpty {
-            let context = makeLabel(content.subtitle, face: "Medium", size: 10 * scale,
+            let context = makeLabel(content.subtitle, face: "Medium", size: config.subtitleFontSize * scale,
                                     color: config.subtitleColor, width: textWidth, lines: 2)
             column.addArrangedSubview(context)
         }
@@ -150,7 +150,7 @@ final class ExpressiveNotificationView: NSView {
             if config.maxBodyCharacters > 0 && body.count > config.maxBodyCharacters {
                 body = String(body.prefix(config.maxBodyCharacters - 1)) + "…"
             }
-            column.addArrangedSubview(makeLabel(body, face: "Regular", size: 12 * scale,
+            column.addArrangedSubview(makeLabel(body, face: "Regular", size: config.bodyFontSize * scale,
                                                color: config.bodyColor, width: textWidth,
                                                lines: config.maxBodyLines))
         }

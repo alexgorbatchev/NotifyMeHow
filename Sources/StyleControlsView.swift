@@ -21,6 +21,13 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
     private var offsetYField: NSTextField!
     private var scaleSlider: NSSlider!
     private var scaleLabel: NSTextField!
+    private var widthField: NSTextField!
+    private var paddingField: NSTextField!
+    private var cornerRadiusField: NSTextField!
+    private var titleFontSizeField: NSTextField!
+    private var subtitleFontSizeField: NSTextField!
+    private var bodyFontSizeField: NSTextField!
+    private var shadowCheckbox: NSButton!
     private var opacitySlider: NSSlider!
     private var opacityLabel: NSTextField!
     private var dwellSlider: NSSlider!
@@ -156,6 +163,20 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         scaleLabel = createLabel("1.5x")
         scaleLabel.frame = NSRect(x: padding + 265, y: y + 2, width: 40, height: 20)
         addSubview(scaleLabel)
+
+        let sizesHelp = createHelpButton("Width, padding, corner radius and font sizes are in points before Scale is applied.")
+        sizesHelp.frame = NSRect(x: padding + 310, y: y + 3, width: 14, height: 14)
+        addSubview(sizesHelp)
+
+        y -= 28
+        widthField = addNumberField(label: "Width:", labelWidth: 45, x: padding, y: y, minimum: 100)
+        paddingField = addNumberField(label: "Padding:", labelWidth: 55, x: padding + 110, y: y, minimum: 0)
+        cornerRadiusField = addNumberField(label: "Radius:", labelWidth: 50, x: padding + 230, y: y, minimum: 0)
+
+        y -= 28
+        titleFontSizeField = addNumberField(label: "Title:", labelWidth: 45, x: padding, y: y, minimum: 1)
+        subtitleFontSizeField = addNumberField(label: "Subtitle:", labelWidth: 55, x: padding + 110, y: y, minimum: 1)
+        bodyFontSizeField = addNumberField(label: "Body:", labelWidth: 50, x: padding + 230, y: y, minimum: 1)
 
         // ═══════════════════════════════════════════════════════════════
         // SECTION: Appearance
@@ -331,6 +352,10 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         addSubview(animationPopup)
 
         y -= 24
+        shadowCheckbox = NSButton(checkboxWithTitle: "Shadow", target: nil, action: nil)
+        shadowCheckbox.frame = NSRect(x: padding, y: y, width: 80, height: 20)
+        addSubview(shadowCheckbox)
+
         animationLoopsCheckbox = NSButton(checkboxWithTitle: "Loop animation continuously", target: nil, action: nil)
         animationLoopsCheckbox.frame = NSRect(x: padding + 210, y: y, width: 170, height: 20)
         addSubview(animationLoopsCheckbox)
@@ -340,6 +365,25 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
     }
 
     // MARK: - Section Helpers
+
+    /// Adds a label and a numeric field that only accepts values of at least `minimum`.
+    private func addNumberField(label: String, labelWidth: CGFloat, x: CGFloat, y: CGFloat,
+                                minimum: Double) -> NSTextField {
+        let textLabel = createLabel(label)
+        textLabel.frame = NSRect(x: x, y: y + 2, width: labelWidth, height: 20)
+        addSubview(textLabel)
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimum = NSNumber(value: minimum)
+        formatter.maximumFractionDigits = 1
+
+        let field = NSTextField(frame: NSRect(x: x + labelWidth, y: y, width: 45, height: 22))
+        field.formatter = formatter
+        field.delegate = self
+        addSubview(field)
+        return field
+    }
 
     private func createSectionHeader(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
@@ -365,6 +409,13 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         offsetYField.stringValue = String(Int(style.offsetY))
         scaleSlider.doubleValue = style.scale
         scaleLabel.stringValue = String(format: "%.1fx", style.scale)
+        widthField.doubleValue = style.width
+        paddingField.doubleValue = style.padding
+        cornerRadiusField.doubleValue = style.cornerRadius
+        titleFontSizeField.doubleValue = style.titleFontSize
+        subtitleFontSizeField.doubleValue = style.subtitleFontSize
+        bodyFontSizeField.doubleValue = style.bodyFontSize
+        shadowCheckbox.state = style.hasShadow ? .on : .off
         opacitySlider.doubleValue = style.opacity
         opacityLabel.stringValue = String(format: "%.0f%%", style.opacity * 100)
 
@@ -422,6 +473,13 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         style.offsetX = Double(offsetXField.stringValue) ?? 20
         style.offsetY = Double(offsetYField.stringValue) ?? 20
         style.scale = scaleSlider.doubleValue
+        style.width = widthField.doubleValue
+        style.padding = paddingField.doubleValue
+        style.cornerRadius = cornerRadiusField.doubleValue
+        style.titleFontSize = titleFontSizeField.doubleValue
+        style.subtitleFontSize = subtitleFontSizeField.doubleValue
+        style.bodyFontSize = bodyFontSizeField.doubleValue
+        style.hasShadow = shadowCheckbox.state == .on
         style.opacity = opacitySlider.doubleValue
         // Dwell time: slider value 31 = indefinite (stored as 0)
         let sliderValue = Int(dwellSlider.doubleValue)
@@ -672,7 +730,7 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         let scale = CGFloat(scaleSlider.doubleValue)
 
         // Estimate notification size (base size * scale)
-        let estimatedWidth: CGFloat = 360 * scale
+        let estimatedWidth = CGFloat(widthField.doubleValue) * scale
         let estimatedHeight: CGFloat = 100 * scale
 
         let corner = indexToCorner(positionPopup.indexOfSelectedItem)

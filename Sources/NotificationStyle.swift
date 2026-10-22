@@ -26,6 +26,14 @@ struct NotificationStyle: Codable, Identifiable {
     var hideIcon: Bool = false                   // Hide the app icon in custom notification
     var hideTitle: Bool = false                  // Hide the title in custom notification
     var hideText: Bool = false                   // Hide subtitle and body text in custom notification
+    // Banner metrics in points before `scale` is applied, like borderWidth.
+    var width: Double = 420
+    var padding: Double = 20
+    var cornerRadius: Double = 14
+    var titleFontSize: Double = 20
+    var subtitleFontSize: Double = 10
+    var bodyFontSize: Double = 12
+    var hasShadow: Bool = true
 
     // MARK: - Codable with backwards compatibility
 
@@ -35,6 +43,7 @@ struct NotificationStyle: Codable, Identifiable {
         case customIconPath, backgroundImagePath, showAppName
         case borderWidth, borderColorHex, animation, animationLoops
         case hideSystemNotification, hideIcon, hideTitle, hideText
+        case width, padding, cornerRadius, titleFontSize, subtitleFontSize, bodyFontSize, hasShadow
     }
 
     init() {}
@@ -74,6 +83,13 @@ struct NotificationStyle: Codable, Identifiable {
         hideIcon = try container.decodeIfPresent(Bool.self, forKey: .hideIcon) ?? false
         hideTitle = try container.decodeIfPresent(Bool.self, forKey: .hideTitle) ?? false
         hideText = try container.decodeIfPresent(Bool.self, forKey: .hideText) ?? false
+        width = try container.decodeIfPresent(Double.self, forKey: .width) ?? 420
+        padding = try container.decodeIfPresent(Double.self, forKey: .padding) ?? 20
+        cornerRadius = try container.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? 14
+        titleFontSize = try container.decodeIfPresent(Double.self, forKey: .titleFontSize) ?? 20
+        subtitleFontSize = try container.decodeIfPresent(Double.self, forKey: .subtitleFontSize) ?? 10
+        bodyFontSize = try container.decodeIfPresent(Double.self, forKey: .bodyFontSize) ?? 12
+        hasShadow = try container.decodeIfPresent(Bool.self, forKey: .hasShadow) ?? true
     }
 
     /// Convert to CustomNotificationConfig
@@ -111,6 +127,13 @@ struct NotificationStyle: Codable, Identifiable {
         config.hideIcon = hideIcon
         config.hideTitle = hideTitle
         config.hideText = hideText
+        config.width = CGFloat(width)
+        config.padding = CGFloat(padding)
+        config.cornerRadius = CGFloat(cornerRadius)
+        config.titleFontSize = CGFloat(titleFontSize)
+        config.subtitleFontSize = CGFloat(subtitleFontSize)
+        config.bodyFontSize = CGFloat(bodyFontSize)
+        config.hasShadow = hasShadow
 
         return config
     }
