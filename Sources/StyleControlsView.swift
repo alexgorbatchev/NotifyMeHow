@@ -35,6 +35,9 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
     private var bgColorWell: NSColorWell!
     private var titleColorWell: NSColorWell!
     private var bodyColorWell: NSColorWell!  // Used for both subtitle and body text
+    private var backgroundPopup: NSPopUpButton!
+    private var glassTintSlider: NSSlider!
+    private var glassTintLabel: NSTextField!
     private var iconImageView: NSImageView!
     private var bgImageView: NSImageView!
     private var borderWidthSlider: NSSlider!
@@ -250,6 +253,36 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         bodyColorWell = NSColorWell(frame: NSRect(x: padding + 274, y: y, width: 28, height: 22))
         addSubview(bodyColorWell)
 
+        y -= 30
+        let backgroundLabel = createLabel("Background:")
+        backgroundLabel.frame = NSRect(x: padding, y: y + 2, width: 75, height: 20)
+        addSubview(backgroundLabel)
+
+        backgroundPopup = NSPopUpButton(frame: NSRect(x: padding + 75, y: y, width: 105, height: 24), pullsDown: false)
+        backgroundPopup.addItems(withTitles: Self.backgroundOptions.map(\.title))
+        backgroundPopup.target = self
+        backgroundPopup.action = #selector(backgroundChanged)
+        addSubview(backgroundPopup)
+
+        let tintLabel = createLabel("Tint:")
+        tintLabel.frame = NSRect(x: padding + 190, y: y + 2, width: 30, height: 20)
+        addSubview(tintLabel)
+
+        glassTintSlider = NSSlider(frame: NSRect(x: padding + 222, y: y, width: 100, height: 22))
+        glassTintSlider.minValue = 0
+        glassTintSlider.maxValue = 1
+        glassTintSlider.target = self
+        glassTintSlider.action = #selector(glassTintChanged)
+        addSubview(glassTintSlider)
+
+        glassTintLabel = createLabel("0%")
+        glassTintLabel.frame = NSRect(x: padding + 327, y: y + 2, width: 40, height: 20)
+        addSubview(glassTintLabel)
+
+        let glassHelp = createHelpButton("Glass uses the macOS 26 Liquid Glass material; Tint shades it toward the background color. Earlier macOS versions draw the solid background.")
+        glassHelp.frame = NSRect(x: padding + 365, y: y + 3, width: 14, height: 14)
+        addSubview(glassHelp)
+
         // ═══════════════════════════════════════════════════════════════
         // SECTION: Media
         // ═══════════════════════════════════════════════════════════════
@@ -364,6 +397,19 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         loadStyleIntoControls(NotificationStyle())
     }
 
+    /// Background choices in popup order, keyed by the style's `background` value
+    private static let backgroundOptions: [(value: String, title: String)] = [
+        ("solid", "Solid"), ("glass", "Glass"), ("clearGlass", "Clear Glass")
+    ]
+
+    @objc private func backgroundChanged() {
+        glassTintSlider.isEnabled = backgroundPopup.indexOfSelectedItem > 0
+    }
+
+    @objc private func glassTintChanged() {
+        glassTintLabel.stringValue = String(format: "%.0f%%", glassTintSlider.doubleValue * 100)
+    }
+
     // MARK: - Section Helpers
 
     /// Adds a label and a numeric field that only accepts values of at least `minimum`.
@@ -416,6 +462,10 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         subtitleFontSizeField.doubleValue = style.subtitleFontSize
         bodyFontSizeField.doubleValue = style.bodyFontSize
         shadowCheckbox.state = style.hasShadow ? .on : .off
+        backgroundPopup.selectItem(at: Self.backgroundOptions.firstIndex { $0.value == style.background } ?? 0)
+        glassTintSlider.doubleValue = style.glassTintOpacity
+        glassTintChanged()
+        backgroundChanged()
         opacitySlider.doubleValue = style.opacity
         opacityLabel.stringValue = String(format: "%.0f%%", style.opacity * 100)
 
@@ -479,6 +529,8 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         style.subtitleFontSize = subtitleFontSizeField.doubleValue
         style.bodyFontSize = bodyFontSizeField.doubleValue
         style.hasShadow = shadowCheckbox.state == .on
+        style.background = Self.backgroundOptions[max(0, backgroundPopup.indexOfSelectedItem)].value
+        style.glassTintOpacity = glassTintSlider.doubleValue
         style.opacity = opacitySlider.doubleValue
         // Dwell time: slider value 31 = indefinite (stored as 0)
         let sliderValue = Int(dwellSlider.doubleValue)

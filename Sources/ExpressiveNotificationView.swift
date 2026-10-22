@@ -49,7 +49,9 @@ final class ExpressiveNotificationView: NSView {
         wantsLayer = true
         layer?.cornerRadius = config.cornerRadius * scale
         layer?.masksToBounds = true
-        layer?.backgroundColor = config.backgroundColor.withAlphaComponent(1).cgColor
+        // Over glass the banner stays transparent so the glass effect shows through
+        layer?.backgroundColor = config.background.isAvailableGlass
+            ? NSColor.clear.cgColor : config.backgroundColor.withAlphaComponent(1).cgColor
         layer?.borderWidth = config.borderWidth * scale
         layer?.borderColor = config.borderColor.cgColor
 

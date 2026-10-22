@@ -34,6 +34,8 @@ struct NotificationStyle: Codable, Identifiable {
     var subtitleFontSize: Double = 10
     var bodyFontSize: Double = 12
     var hasShadow: Bool = true
+    var background: String = "solid"             // Banner background: solid, glass, clearGlass
+    var glassTintOpacity: Double = 0             // How strongly glass is tinted toward backgroundColorHex (0-1)
     /// Style whose values fill in every field this style does not override.
     var baseStyleId: UUID? = nil
     /// Fields this style sets itself; the rest come from `baseStyleId`. Ignored for styles without a base.
@@ -48,6 +50,7 @@ struct NotificationStyle: Codable, Identifiable {
         case borderWidth, borderColorHex, animation, animationLoops
         case hideSystemNotification, hideIcon, hideTitle, hideText
         case width, padding, cornerRadius, titleFontSize, subtitleFontSize, bodyFontSize, hasShadow
+        case background, glassTintOpacity
         case baseStyleId
     }
 
@@ -95,6 +98,8 @@ struct NotificationStyle: Codable, Identifiable {
         subtitleFontSize = try container.decodeIfPresent(Double.self, forKey: .subtitleFontSize) ?? 10
         bodyFontSize = try container.decodeIfPresent(Double.self, forKey: .bodyFontSize) ?? 12
         hasShadow = try container.decodeIfPresent(Bool.self, forKey: .hasShadow) ?? true
+        background = try container.decodeIfPresent(String.self, forKey: .background) ?? "solid"
+        glassTintOpacity = try container.decodeIfPresent(Double.self, forKey: .glassTintOpacity) ?? 0
         baseStyleId = try container.decodeIfPresent(UUID.self, forKey: .baseStyleId)
         // Present keys (including explicit nulls) are this style's overrides
         overriddenFields = Set(container.allKeys).intersection(NotificationStyle.inheritableFields.map(\.key))
@@ -146,7 +151,8 @@ struct NotificationStyle: Codable, Identifiable {
         field(.hideTitle, \.hideTitle), field(.hideText, \.hideText),
         field(.width, \.width), field(.padding, \.padding), field(.cornerRadius, \.cornerRadius),
         field(.titleFontSize, \.titleFontSize), field(.subtitleFontSize, \.subtitleFontSize),
-        field(.bodyFontSize, \.bodyFontSize), field(.hasShadow, \.hasShadow)
+        field(.bodyFontSize, \.bodyFontSize), field(.hasShadow, \.hasShadow),
+        field(.background, \.background), field(.glassTintOpacity, \.glassTintOpacity)
     ]
 
     /// The style with every field filled in from its base chain. A missing or cyclic base is ignored,
@@ -241,6 +247,8 @@ struct NotificationStyle: Codable, Identifiable {
         config.subtitleFontSize = CGFloat(subtitleFontSize)
         config.bodyFontSize = CGFloat(bodyFontSize)
         config.hasShadow = hasShadow
+        config.background = BannerBackground(rawValue: background) ?? .solid
+        config.glassTintOpacity = CGFloat(glassTintOpacity)
 
         return config
     }

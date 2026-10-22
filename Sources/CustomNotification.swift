@@ -1,6 +1,20 @@
 import Cocoa
 import ApplicationServices
 
+/// What a banner is drawn on.
+enum BannerBackground: String {
+    case solid
+    case glass
+    case clearGlass
+
+    /// Glass needs macOS 26; earlier systems draw the solid background instead.
+    var isAvailableGlass: Bool {
+        guard self != .solid else { return false }
+        if #available(macOS 26.0, *) { return true }
+        return false
+    }
+}
+
 /// Configuration for custom notification appearance
 struct CustomNotificationConfig {
     var backgroundColor: NSColor = NSColor.black.withAlphaComponent(0.85)
@@ -16,6 +30,8 @@ struct CustomNotificationConfig {
     var padding: CGFloat = 20
     var width: CGFloat = 420
     var hasShadow: Bool = true
+    var background: BannerBackground = .solid
+    var glassTintOpacity: CGFloat = 0  // How strongly glass is tinted toward backgroundColor (0-1)
     var maxHeight: CGFloat = 200
     var opacity: CGFloat = 1.0
     var dwellTime: TimeInterval = 5.0  // How long to show before auto-dismiss
@@ -315,7 +331,17 @@ class CustomNotificationManager {
         window.backgroundColor = .clear
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .stationary]
-        window.contentView = contentView
+        if config.background.isAvailableGlass, #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView(frame: contentView.bounds)
+            glass.style = config.background == .clearGlass ? .clear : .regular
+            glass.cornerRadius = config.cornerRadius * config.scaleFactor
+            glass.tintColor = config.glassTintOpacity > 0
+                ? config.backgroundColor.withAlphaComponent(config.glassTintOpacity) : nil
+            glass.contentView = contentView
+            window.contentView = glass
+        } else {
+            window.contentView = contentView
+        }
         contentView.frame = window.contentView!.bounds
 
         return window

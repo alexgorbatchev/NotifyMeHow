@@ -40,7 +40,9 @@
       "titleFontSize": 14,
       "subtitleFontSize": 10,
       "bodyFontSize": 12,
-      "hasShadow": true
+      "hasShadow": true,
+      "background": "glass",
+      "glassTintOpacity": 0
     },
     {
       "id": "7a35d94e-28b7-4b72-91f8-038e89fce90a",
