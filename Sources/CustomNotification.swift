@@ -58,6 +58,13 @@ struct CustomNotificationConfig {
     var hideText: Bool = false  // Hide subtitle and body text
 }
 
+/// A text element read from a NotificationCenter banner. macOS labels each one with an
+/// AXIdentifier of "title", "subtitle" or "body".
+struct NotificationText {
+    let identifier: String?
+    let value: String
+}
+
 /// Content extracted from a notification
 struct NotificationContent {
     var appName: String = ""
@@ -66,6 +73,28 @@ struct NotificationContent {
     var body: String = ""
     var appIcon: NSImage? = nil      // App icon from bundle
     var profileImage: NSImage? = nil  // Profile/contact image if available
+
+    /// Assigns texts by their identifier; texts without one fill the remaining roles in order.
+    mutating func assignTexts(_ texts: [NotificationText]) {
+        var unlabeled: [String] = []
+        for text in texts {
+            switch text.identifier {
+            case "title": title = text.value
+            case "subtitle": subtitle = text.value
+            case "body": body = text.value
+            default: unlabeled.append(text.value)
+            }
+        }
+        for value in unlabeled {
+            if title.isEmpty {
+                title = value
+            } else if subtitle.isEmpty {
+                subtitle = value
+            } else if body.isEmpty {
+                body = value
+            }
+        }
+    }
 
     var clipboardText: String {
         let cleanedTitle = title.hasPrefix("[slk] ") ? String(title.dropFirst(6)) : title
@@ -114,12 +143,9 @@ class CustomNotificationManager {
         }
 
         // Get text values from children
-        var texts: [String] = []
+        var texts: [NotificationText] = []
         extractTexts(from: banner, into: &texts)
-
-        if texts.count >= 1 { content.title = texts[0] }
-        if texts.count >= 2 { content.subtitle = texts[1] }
-        if texts.count >= 3 { content.body = texts[2] }
+        content.assignTexts(texts)
 
         // Get app icon from running applications
         if !content.appName.isEmpty {
@@ -207,12 +233,15 @@ class CustomNotificationManager {
         return nil
     }
 
-    private func extractTexts(from element: AXUIElement, into texts: inout [String]) {
-        // Check for AXValue (text content)
+    private func extractTexts(from element: AXUIElement, into texts: inout [NotificationText]) {
+        // Check for AXValue (text content) and the role macOS labels it with
         var valueRef: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
            let value = valueRef as? String, !value.isEmpty {
-            texts.append(value)
+            var identifierRef: CFTypeRef?
+            let identifier = AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifierRef)
+                == .success ? identifierRef as? String : nil
+            texts.append(NotificationText(identifier: identifier, value: value))
         }
 
         // Recurse into children
