@@ -81,8 +81,10 @@ class CustomNotificationManager {
 
     private static let reflowDuration: TimeInterval = 0.25
     private static let fadeDuration: TimeInterval = 0.3
-    /// Blur radius glass banner content starts from when fading in and ends at when fading out.
-    private static let transitionBlurRadius: CGFloat = 12
+    /// Blur radius glass banner content sharpens from while fading in
+    private static let fadeInBlurRadius: CGFloat = 4
+    /// Blur radius glass banner content dissolves into while fading out
+    private static let fadeOutBlurRadius: CGFloat = 12
     private static let transitionBlurFilterName = "transitionBlur"
 
     private var activeWindows: [NSWindow] = []
@@ -241,7 +243,7 @@ class CustomNotificationManager {
 
             let bannerView = self.bannerViews[window]
             if config.background.usesBlurTransition, let bannerView {
-                self.animateBlur(of: bannerView, from: Self.transitionBlurRadius, to: 0)
+                self.animateBlur(of: bannerView, from: Self.fadeInBlurRadius, to: 0)
             }
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Self.fadeDuration
@@ -315,7 +317,7 @@ class CustomNotificationManager {
 
     private func dismissNotification(_ window: NSWindow) {
         if windowConfigs[window]?.background.usesBlurTransition == true, let bannerView = bannerViews[window] {
-            animateBlur(of: bannerView, from: 0, to: Self.transitionBlurRadius)
+            animateBlur(of: bannerView, from: 0, to: Self.fadeOutBlurRadius)
         }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = Self.fadeDuration
