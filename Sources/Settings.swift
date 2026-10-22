@@ -325,6 +325,8 @@ class Settings {
         var styles: [NotificationStyle]
         var rules: [NotificationRule]
         var defaultBehavior: String
+        /// Style used when no rule matches; absent in files exported before it was added
+        var defaultStyleId: UUID? = nil
     }
 
     struct SettingsExport: Codable {
@@ -352,7 +354,8 @@ class Settings {
             settings: settingsExport,
             styles: StylesManager.shared.styles,
             rules: RulesManager.shared.rules,
-            defaultBehavior: RulesManager.shared.defaultBehavior == .noCustom ? "noCustom" : "showCustom"
+            defaultBehavior: RulesManager.shared.defaultBehavior == .noCustom ? "noCustom" : "showCustom",
+            defaultStyleId: RulesManager.shared.defaultStyleId
         )
 
         let encoder = JSONEncoder()
@@ -383,6 +386,9 @@ class Settings {
         StylesManager.shared.replaceAllStyles(exportData.styles)
         RulesManager.shared.replaceAllRules(exportData.rules)
         RulesManager.shared.defaultBehavior = exportData.defaultBehavior == "noCustom" ? .noCustom : .showCustom
+        if let defaultStyleId = exportData.defaultStyleId {
+            RulesManager.shared.defaultStyleId = defaultStyleId
+        }
     }
 
     /// Import all settings, styles, and rules from JSON data

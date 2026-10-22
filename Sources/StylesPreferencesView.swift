@@ -251,14 +251,18 @@ class StyleEditorWindowController: NSWindowController {
     private var onSave: (NotificationStyle) -> Void
 
     private var nameField: NSTextField!
+    private var basePopup: NSPopUpButton!
     private var styleControlsView: StyleControlsView!
+    /// Styles offered as a base, in popup order after "None"
+    private var baseCandidates: [NotificationStyle] = []
+    private var currentBaseId: UUID?
 
     init(style: NotificationStyle, onSave: @escaping (NotificationStyle) -> Void) {
         self.style = style
         self.onSave = onSave
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 696),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 726),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -290,8 +294,19 @@ class StyleEditorWindowController: NSWindowController {
         nameField = NSTextField(frame: NSRect(x: padding + 100, y: contentView.frame.height - 35, width: 260, height: 22))
         contentView.addSubview(nameField)
 
+        // Base style: unchanged fields follow it, only differences are stored
+        let baseLabel = NSTextField(labelWithString: "Based On:")
+        baseLabel.font = NSFont.boldSystemFont(ofSize: 12)
+        baseLabel.frame = NSRect(x: padding, y: contentView.frame.height - 65, width: 100, height: 22)
+        contentView.addSubview(baseLabel)
+
+        basePopup = NSPopUpButton(frame: NSRect(x: padding + 100, y: contentView.frame.height - 67, width: 260, height: 26), pullsDown: false)
+        basePopup.target = self
+        basePopup.action = #selector(baseChanged)
+        contentView.addSubview(basePopup)
+
         // Style controls view (all the shared controls)
-        styleControlsView = StyleControlsView(frame: NSRect(x: 0, y: 60, width: contentView.frame.width, height: contentView.frame.height - 110))
+        styleControlsView = StyleControlsView(frame: NSRect(x: 0, y: 60, width: contentView.frame.width, height: contentView.frame.height - 140))
         styleControlsView.parentWindow = window
         contentView.addSubview(styleControlsView)
 
@@ -320,7 +335,43 @@ class StyleEditorWindowController: NSWindowController {
 
     private func loadStyle() {
         nameField.stringValue = style.name
-        styleControlsView.style = style
+
+        // A style cannot be based on itself or on any style that already inherits from it
+        let styles = StylesManager.shared.styles
+        baseCandidates = styles.filter { !NotificationStyle.inherits($0, from: style.id, in: styles) }
+        basePopup.removeAllItems()
+        basePopup.addItem(withTitle: "None")
+        basePopup.addItems(withTitles: baseCandidates.map(\.name))
+
+        currentBaseId = style.baseStyleId.flatMap { baseId in baseCandidates.contains { $0.id == baseId } ? baseId : nil }
+        if let baseId = currentBaseId, let index = baseCandidates.firstIndex(where: { $0.id == baseId }) {
+            basePopup.selectItem(at: index + 1)
+        } else {
+            basePopup.selectItem(at: 0)
+        }
+        styleControlsView.style = NotificationStyle.resolved(style, in: styles)
+    }
+
+    private func resolvedBase(_ baseId: UUID?) -> NotificationStyle? {
+        return baseId.flatMap { StylesManager.shared.resolvedStyle(withId: $0) }
+    }
+
+    /// Re-bases the edited values: overrides relative to the previous base carry over onto the new base.
+    @objc private func baseChanged() {
+        let selectedIndex = basePopup.indexOfSelectedItem
+        let newBaseId = selectedIndex > 0 ? baseCandidates[selectedIndex - 1].id : nil
+        guard newBaseId != currentBaseId else { return }
+
+        var edited = styleControlsView.style
+        if let previousBase = resolvedBase(currentBaseId) {
+            edited = edited.inheriting(from: previousBase)
+        }
+        currentBaseId = newBaseId
+
+        if let newBase = resolvedBase(newBaseId) {
+            edited.baseStyleId = newBase.id
+            styleControlsView.style = NotificationStyle.resolved(edited, in: StylesManager.shared.styles)
+        }
     }
 
     @objc private func cancel() {
@@ -332,6 +383,12 @@ class StyleEditorWindowController: NSWindowController {
         var updatedStyle = styleControlsView.style
         updatedStyle.id = style.id  // Preserve original ID
         updatedStyle.name = nameField.stringValue.isEmpty ? "Unnamed Style" : nameField.stringValue
+        if let base = resolvedBase(currentBaseId) {
+            updatedStyle = updatedStyle.inheriting(from: base)
+        } else {
+            updatedStyle.baseStyleId = nil
+            updatedStyle.overriddenFields = Set(NotificationStyle.inheritableFields.map(\.key))
+        }
 
         onSave(updatedStyle)
         window?.orderOut(nil)

@@ -34,6 +34,10 @@ struct NotificationStyle: Codable, Identifiable {
     var subtitleFontSize: Double = 10
     var bodyFontSize: Double = 12
     var hasShadow: Bool = true
+    /// Style whose values fill in every field this style does not override.
+    var baseStyleId: UUID? = nil
+    /// Fields this style sets itself; the rest come from `baseStyleId`. Ignored for styles without a base.
+    var overriddenFields: Set<CodingKeys> = Set(NotificationStyle.inheritableFields.map(\.key))
 
     // MARK: - Codable with backwards compatibility
 
@@ -44,6 +48,7 @@ struct NotificationStyle: Codable, Identifiable {
         case borderWidth, borderColorHex, animation, animationLoops
         case hideSystemNotification, hideIcon, hideTitle, hideText
         case width, padding, cornerRadius, titleFontSize, subtitleFontSize, bodyFontSize, hasShadow
+        case baseStyleId
     }
 
     init() {}
@@ -90,6 +95,107 @@ struct NotificationStyle: Codable, Identifiable {
         subtitleFontSize = try container.decodeIfPresent(Double.self, forKey: .subtitleFontSize) ?? 10
         bodyFontSize = try container.decodeIfPresent(Double.self, forKey: .bodyFontSize) ?? 12
         hasShadow = try container.decodeIfPresent(Bool.self, forKey: .hasShadow) ?? true
+        baseStyleId = try container.decodeIfPresent(UUID.self, forKey: .baseStyleId)
+        // Present keys (including explicit nulls) are this style's overrides
+        overriddenFields = Set(container.allKeys).intersection(NotificationStyle.inheritableFields.map(\.key))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(baseStyleId, forKey: .baseStyleId)
+        // A derived style stores only its overrides; a root style stores every field
+        for field in NotificationStyle.inheritableFields where baseStyleId == nil || overriddenFields.contains(field.key) {
+            try field.encode(self, &container)
+        }
+    }
+
+    // MARK: - Inheritance
+
+    /// A style field that a derived style can inherit from its base.
+    struct InheritableField {
+        let key: CodingKeys
+        let copy: (inout NotificationStyle, NotificationStyle) -> Void
+        let isEqual: (NotificationStyle, NotificationStyle) -> Bool
+        let encode: (NotificationStyle, inout KeyedEncodingContainer<CodingKeys>) throws -> Void
+    }
+
+    private static func field<Value: Codable & Equatable>(
+        _ key: CodingKeys, _ keyPath: WritableKeyPath<NotificationStyle, Value>
+    ) -> InheritableField {
+        return InheritableField(
+            key: key,
+            copy: { target, source in target[keyPath: keyPath] = source[keyPath: keyPath] },
+            isEqual: { $0[keyPath: keyPath] == $1[keyPath: keyPath] },
+            // Optionals encode as null so an explicit "none" override survives a round trip
+            encode: { style, container in try container.encode(style[keyPath: keyPath], forKey: key) }
+        )
+    }
+
+    static let inheritableFields: [InheritableField] = [
+        field(.position, \.position), field(.offsetX, \.offsetX), field(.offsetY, \.offsetY),
+        field(.scale, \.scale), field(.opacity, \.opacity), field(.dwellTime, \.dwellTime),
+        field(.backgroundColorHex, \.backgroundColorHex), field(.appColorHex, \.appColorHex),
+        field(.titleColorHex, \.titleColorHex), field(.subtitleColorHex, \.subtitleColorHex),
+        field(.bodyColorHex, \.bodyColorHex), field(.customIconPath, \.customIconPath),
+        field(.backgroundImagePath, \.backgroundImagePath), field(.showAppName, \.showAppName),
+        field(.borderWidth, \.borderWidth), field(.borderColorHex, \.borderColorHex),
+        field(.animation, \.animation), field(.animationLoops, \.animationLoops),
+        field(.hideSystemNotification, \.hideSystemNotification), field(.hideIcon, \.hideIcon),
+        field(.hideTitle, \.hideTitle), field(.hideText, \.hideText),
+        field(.width, \.width), field(.padding, \.padding), field(.cornerRadius, \.cornerRadius),
+        field(.titleFontSize, \.titleFontSize), field(.subtitleFontSize, \.subtitleFontSize),
+        field(.bodyFontSize, \.bodyFontSize), field(.hasShadow, \.hasShadow)
+    ]
+
+    /// The style with every field filled in from its base chain. A missing or cyclic base is ignored,
+    /// leaving the style's own (or default) values in place.
+    static func resolved(_ style: NotificationStyle, in styles: [NotificationStyle],
+                         visiting: Set<UUID> = []) -> NotificationStyle {
+        let visiting = visiting.union([style.id])
+        guard let baseId = style.baseStyleId, !visiting.contains(baseId),
+              let base = styles.first(where: { $0.id == baseId }) else {
+            return style
+        }
+
+        var result = resolved(base, in: styles, visiting: visiting)
+        result.id = style.id
+        result.name = style.name
+        result.baseStyleId = style.baseStyleId
+        result.overriddenFields = style.overriddenFields
+        for field in inheritableFields where style.overriddenFields.contains(field.key) {
+            field.copy(&result, style)
+        }
+        return result
+    }
+
+    /// Whether `ancestorId` is this style or anywhere in its base chain; stops at cycles.
+    static func inherits(_ style: NotificationStyle, from ancestorId: UUID, in styles: [NotificationStyle]) -> Bool {
+        var current: NotificationStyle? = style
+        var visited: Set<UUID> = []
+        while let candidate = current, visited.insert(candidate.id).inserted {
+            if candidate.id == ancestorId { return true }
+            current = candidate.baseStyleId.flatMap { baseId in styles.first { $0.id == baseId } }
+        }
+        return false
+    }
+
+    /// This fully specified style turned into one based on `base` (already resolved), overriding only
+    /// the fields whose values differ from it.
+    func inheriting(from base: NotificationStyle) -> NotificationStyle {
+        var style = self
+        style.baseStyleId = base.id
+        style.overriddenFields = Set(NotificationStyle.inheritableFields.filter { !$0.isEqual(self, base) }.map(\.key))
+        return style
+    }
+
+    /// The resolved style as a standalone root style with no base.
+    func flattened(in styles: [NotificationStyle]) -> NotificationStyle {
+        var style = NotificationStyle.resolved(self, in: styles)
+        style.baseStyleId = nil
+        style.overriddenFields = Set(NotificationStyle.inheritableFields.map(\.key))
+        return style
     }
 
     /// Convert to CustomNotificationConfig
@@ -213,6 +319,18 @@ class StylesManager {
         return styles.first { $0.id == id }
     }
 
+    /// The style with inherited fields filled in from its base chain, ready to render.
+    func resolvedStyle(withId id: UUID) -> NotificationStyle? {
+        return style(withId: id).map { NotificationStyle.resolved($0, in: styles) }
+    }
+
+    /// Removes a style, first flattening any style based on it so their appearance is unchanged.
+    static func removingStyle(withId id: UUID, from styles: [NotificationStyle]) -> [NotificationStyle] {
+        return styles
+            .map { $0.baseStyleId == id ? $0.flattened(in: styles) : $0 }
+            .filter { $0.id != id }
+    }
+
     func style(named name: String) -> NotificationStyle? {
         return styles.first { $0.name == name }
     }
@@ -237,14 +355,14 @@ class StylesManager {
         guard index >= 0 && index < styles.count else { return }
         // Don't allow deleting the last style
         if styles.count <= 1 { return }
-        styles.remove(at: index)
+        styles = StylesManager.removingStyle(withId: styles[index].id, from: styles)
         saveStyles()
         notifyChange()
     }
 
     func deleteStyle(withId id: UUID) {
         if styles.count <= 1 { return }
-        styles.removeAll { $0.id == id }
+        styles = StylesManager.removingStyle(withId: id, from: styles)
         saveStyles()
         notifyChange()
     }

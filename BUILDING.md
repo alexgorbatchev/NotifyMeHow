@@ -57,7 +57,13 @@ just test
 
 `notifymehow.local.json` uses the Settings > Export format. `just run` imports it with
 `NotifyMeHow --import-settings`, which replaces settings, styles and rules but leaves
-launch-at-login unchanged. Image paths may start with `~`.
+launch-at-login unchanged. Image paths may start with `~`. `defaultStyleId` picks the style
+used when no rule matches.
+
+A style with `baseStyleId` lists only the fields it changes and inherits the rest from that
+style (bases can chain). The style editor's "Based On" menu sets it and saves only the
+fields that differ from the base. Deleting a base style copies its values into the styles
+based on it, so their appearance does not change.
 
 `just build` signs with a Developer ID (override with `NOTIFYMEHOW_SIGNING_IDENTITY`), so
 the Accessibility permission granted once in System Settings > Privacy & Security >

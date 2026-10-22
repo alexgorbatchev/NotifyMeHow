@@ -51,8 +51,8 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
     private var customIconPath: String?
     private var backgroundImagePath: String?
 
-    // Track the original style ID when loading
-    private var currentStyleId: UUID?
+    // The style last loaded; fields without controls (e.g. app color) are carried over from it
+    private var loadedStyle = NotificationStyle()
 
     // MARK: - Initialization
 
@@ -402,7 +402,7 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
     // MARK: - Style Loading/Building
 
     private func loadStyleIntoControls(_ style: NotificationStyle) {
-        currentStyleId = style.id
+        loadedStyle = style
 
         positionPopup.selectItem(at: cornerToIndex(style.position))
         offsetXField.stringValue = String(Int(style.offsetX))
@@ -467,8 +467,7 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
     }
 
     private func buildStyleFromControls() -> NotificationStyle {
-        var style = NotificationStyle()
-        style.id = currentStyleId ?? UUID()
+        var style = loadedStyle
         style.position = indexToCorner(positionPopup.indexOfSelectedItem)
         style.offsetX = Double(offsetXField.stringValue) ?? 20
         style.offsetY = Double(offsetYField.stringValue) ?? 20
@@ -492,7 +491,6 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         style.bodyColorHex = textColorHex
         style.customIconPath = customIconPath
         style.backgroundImagePath = backgroundImagePath
-        style.showAppName = false  // No longer exposed in UI
         style.borderWidth = borderWidthSlider.doubleValue
         style.borderColorHex = hexFromColor(borderColorWell.color)
         style.animation = indexToAnimation(animationPopup.indexOfSelectedItem)

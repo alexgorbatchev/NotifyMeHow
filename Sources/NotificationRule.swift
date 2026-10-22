@@ -153,7 +153,7 @@ struct NotificationRule: Codable, Identifiable {
     /// Get the style for this rule, if any
     var style: NotificationStyle? {
         guard let styleId = styleId else { return nil }
-        return StylesManager.shared.style(withId: styleId)
+        return StylesManager.shared.resolvedStyle(withId: styleId)
     }
 }
 
@@ -233,10 +233,10 @@ class RulesManager {
         switch defaultBehavior {
         case .showCustom:
             if let styleId = defaultStyleId {
-                return StylesManager.shared.style(withId: styleId)
+                return StylesManager.shared.resolvedStyle(withId: styleId)
             }
             // Fall back to first available style
-            return StylesManager.shared.styles.first
+            return StylesManager.shared.styles.first.flatMap { StylesManager.shared.resolvedStyle(withId: $0.id) }
         case .noCustom:
             return nil
         }
