@@ -114,7 +114,7 @@ cat > "${APP_DIR}/Contents/Info.plist" << 'EOF'
     <key>CFBundleDisplayName</key>
     <string>NotifyMeHow</string>
     <key>CFBundleIdentifier</key>
-    <string>com.motleywoods.NotifyMeHow</string>
+    <string>com.alexgorbatchev.notifymehow</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}.0</string>
     <key>CFBundleShortVersionString</key>

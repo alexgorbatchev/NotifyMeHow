@@ -6,6 +6,9 @@ set -euo pipefail
 APP_NAME="NotifyMeHow"
 CONFIG="${1:-release}"
 APP_DIR="${2:-${APP_NAME}.app}"
+# Ad-hoc signing ("-") is trusted per binary, so macOS forgets Accessibility
+# permission on every rebuild; a real identity keeps it across rebuilds.
+CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
 
 echo "Building ${APP_NAME} (${CONFIG})..."
 swift build -c "${CONFIG}"
@@ -24,6 +27,6 @@ cp -f "Resources/MenuBarIcon.png" "${APP_DIR}/Contents/Resources/"
 cp -f "Resources/MenuBarIcon@2x.png" "${APP_DIR}/Contents/Resources/"
 cp -f Resources/Fonts/* "${APP_DIR}/Contents/Resources/Fonts/"
 
-codesign --force --deep --sign - "${APP_DIR}"
+codesign --force --deep --sign "${CODESIGN_IDENTITY}" "${APP_DIR}"
 
 echo "App bundle created: ${APP_DIR}"

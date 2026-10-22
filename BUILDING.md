@@ -44,8 +44,8 @@ The app also supports command-line usage for scripting:
 The `justfile` wraps the local development loop:
 
 ```bash
-# Rebuild, quit any running NotifyMeHow, reset its Accessibility permission,
-# apply notifymehow.local.json, launch the local build
+# Rebuild and sign, quit any running NotifyMeHow, apply notifymehow.local.json,
+# launch the local build
 just run
 
 # Send test notifications for NotifyMeHow to restyle
@@ -59,10 +59,11 @@ just test
 `NotifyMeHow --import-settings`, which replaces settings, styles and rules but leaves
 launch-at-login unchanged. Image paths may start with `~`.
 
-Ad-hoc signed builds are trusted per binary, so `just run` clears the Accessibility
-permission (`tccutil reset Accessibility com.motleywoods.NotifyMeHow`) and each new build
-must be enabled again in System Settings > Privacy & Security > Accessibility. This also
-clears the permission of an installed copy, which shares the bundle identifier.
+`just build` signs with a Developer ID (override with `NOTIFYMEHOW_SIGNING_IDENTITY`), so
+the Accessibility permission granted once in System Settings > Privacy & Security >
+Accessibility survives rebuilds. `./create-app.sh` alone signs ad hoc (or with
+`CODESIGN_IDENTITY`); ad-hoc builds are trusted per binary and lose the permission on every
+rebuild. `just reset-permissions` clears the permission when you want a fresh prompt.
 
 ```bash
 # Build only (no app bundle)

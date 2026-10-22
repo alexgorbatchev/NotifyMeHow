@@ -1,39 +1,44 @@
-bundle_id := "com.motleywoods.NotifyMeHow"
+bundle_id := "com.alexgorbatchev.notifymehow"
+# Bundle identifier of upstream NotifyMeHow builds, quit so both never hide notifications at once
+upstream_bundle_id := "com.motleywoods.NotifyMeHow"
 app := "NotifyMeHow.app"
+# A stable signing identity keeps the Accessibility permission across rebuilds
+signing_identity := env("NOTIFYMEHOW_SIGNING_IDENTITY", "Developer ID Application: Alex Gorb (4XCZD8P4CJ)")
 
 default:
     @just --list
 
 # Build the release app bundle into NotifyMeHow.app
 build:
-    ./create-app.sh release
+    CODESIGN_IDENTITY="{{ signing_identity }}" ./create-app.sh release
 
 # Run the test suite
 test:
     swift test
 
 # Rebuild, then replace any running NotifyMeHow with the local build using notifymehow.local.json
-run: build quit reset-permissions apply-local-config
+run: build quit apply-local-config
     open {{ app }}
 
-# Clear NotifyMeHow's Accessibility permission so the next launch asks again. Each ad-hoc
-# signed build is trusted per binary, so a grant for a previous build no longer applies.
+# Clear NotifyMeHow's Accessibility permission so the next launch asks again
 reset-permissions:
     tccutil reset Accessibility {{ bundle_id }}
 
-# Quit any running NotifyMeHow (installed or local build) and wait for it to exit
+# Quit any running NotifyMeHow (this fork or upstream) and wait for it to exit
 quit:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ -z "$(lsappinfo find bundleid={{ bundle_id }})" ]] && exit 0
-    echo "Quitting {{ bundle_id }}"
-    osascript -e 'tell application id "{{ bundle_id }}" to quit'
-    for _ in {1..50}; do
-        [[ -z "$(lsappinfo find bundleid={{ bundle_id }})" ]] && exit 0
-        sleep 0.1
+    for id in {{ bundle_id }} {{ upstream_bundle_id }}; do
+        [[ -z "$(lsappinfo find bundleid="$id")" ]] && continue
+        echo "Quitting $id"
+        osascript -e "tell application id \"$id\" to quit"
+        for _ in {1..50}; do
+            [[ -z "$(lsappinfo find bundleid="$id")" ]] && continue 2
+            sleep 0.1
+        done
+        echo "$id did not quit within 5s" >&2
+        exit 1
     done
-    echo "{{ bundle_id }} did not quit within 5s" >&2
-    exit 1
 
 # Replace settings, styles and rules with notifymehow.local.json (run while NotifyMeHow is not running)
 apply-local-config:
