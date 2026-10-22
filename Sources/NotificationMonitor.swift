@@ -262,15 +262,18 @@ class NotificationMonitor {
             // Record notification for history (used by Recent tab)
             NotificationHistory.shared.record(content)
 
-            if let style = RulesManager.shared.styleFor(content: content) {
+            let style = RulesManager.shared.styleFor(content: content)
+            if let style {
                 let config = style.toConfig()
                 CustomNotificationManager.shared.configure(config)
                 CustomNotificationManager.shared.showNotification(content: content)
+            }
 
-                // Hide system notification by dismissing it cleanly
-                if style.hideSystemNotification {
-                    hideSystemNotification(bannerContainer, window: window)
-                }
+            if let style, style.hideSystemNotification {
+                hideSystemNotification(bannerContainer, window: window)
+            } else {
+                // This banner should stay visible even if the window was hidden for an earlier one
+                restoreWindowIfOffScreen(window)
             }
         }
     }
@@ -353,20 +356,28 @@ class NotificationMonitor {
         return false
     }
 
-    /// Hide system notification by moving the banner off-screen instantly and dismissing it cleanly
+    /// Hide system notification by moving its window off-screen instantly and dismissing it cleanly.
+    /// On macOS 26 NotificationCenter accepts but ignores position changes on the banner element, and a
+    /// Close action only takes effect after the banner finishes sliding in (~1.3s), so only moving the
+    /// hosting window hides the banner immediately. NotificationCenter destroys that window once the
+    /// banner is dismissed; a banner that must stay visible restores it via `restoreWindowIfOffScreen`.
     private func hideSystemNotification(_ banner: AXUIElement, window: AXUIElement) {
-        // Move the banner itself off-screen so it disappears instantly without waiting for fade-out
         var point = CGPoint(x: -5000, y: -5000)
         if let value = AXValueCreate(.cgPoint, &point) {
-            let setBannerRes = AXUIElementSetAttributeValue(banner, kAXPositionAttribute as CFString, value)
-            if setBannerRes != .success {
-                // Fallback only if moving the banner failed
-                AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value)
-            }
+            AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value)
         }
 
         // Cleanly dismiss the notification from NotificationCenter
         dismissSystemNotification(banner)
+    }
+
+    /// Moves a NotificationCenter window back on-screen if an earlier hide left it off-screen.
+    private func restoreWindowIfOffScreen(_ window: AXUIElement) {
+        guard let pos = getPosition(of: window), pos.x <= -1000 || pos.y <= -1000 else { return }
+        var origin = CGPoint.zero
+        if let value = AXValueCreate(.cgPoint, &origin) {
+            AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value)
+        }
     }
 
     private func findAllBannerContainers(in root: AXUIElement, maxDepth: Int = 6) -> [AXUIElement] {
@@ -461,12 +472,7 @@ class NotificationMonitor {
         let windows = getNotificationWindows()
         for window in windows {
             // Restore window if it was left off-screen by a previous session
-            if let pos = getPosition(of: window), pos.x <= -1000 || pos.y <= -1000 {
-                var origin = CGPoint.zero
-                if let val = AXValueCreate(.cgPoint, &origin) {
-                    AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, val)
-                }
-            }
+            restoreWindowIfOffScreen(window)
             repositionNotificationWindow(window)
         }
     }
