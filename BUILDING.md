@@ -41,6 +41,24 @@ The app also supports command-line usage for scripting:
 
 ## Development
 
+The `justfile` wraps the local development loop:
+
+```bash
+# Rebuild, quit any running NotifyMeHow, apply notifymehow.local.json, launch the local build
+just run
+
+# Send test notifications for NotifyMeHow to restyle
+just test-notifications
+
+# Run tests
+just test
+```
+
+`notifymehow.local.json` uses the Settings > Export format. `just run` imports it with
+`NotifyMeHow --import-settings`, which replaces settings, styles and rules but leaves
+launch-at-login unchanged. Image paths may start with `~`. The local build needs its own
+Accessibility permission because ad-hoc signed builds are trusted per binary.
+
 ```bash
 # Build only (no app bundle)
 swift build

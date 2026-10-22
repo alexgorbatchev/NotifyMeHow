@@ -7,7 +7,7 @@ func shouldRunGUI() -> Bool {
     // CLI mode only if specific CLI flags are passed
     let cliFlags = ["--help", "-h", "--position", "-p", "--scale", "-s",
                     "--debug", "-d", "--test-hide", "--offset-x", "-ox",
-                    "--offset-y", "-oy", "--custom", "-c"]
+                    "--offset-y", "-oy", "--custom", "-c", "--import-settings"]
     for arg in args {
         if cliFlags.contains(arg) {
             return false
@@ -99,6 +99,14 @@ func parseArguments() -> ParsedArgs {
 
         case "--test-hide":
             testHideNotifications()
+            exit(0)
+
+        case "--import-settings":
+            guard i + 1 < argv.count else {
+                print("--import-settings requires a file path")
+                exit(1)
+            }
+            importSettings(fromPath: argv[i + 1])
             exit(0)
 
         case "--help", "-h":
@@ -205,6 +213,9 @@ func printHelp() {
       -d, --debug             Print debug information about windows
       -g, --gui               Run as menu bar application (GUI mode)
       --test-hide             Test hiding notification windows (experimental)
+      --import-settings <file>
+                              Replace settings, styles and rules with an exported
+                              JSON file (launch-at-login is left unchanged)
       -h, --help              Show this help message
 
     Examples:
@@ -319,6 +330,23 @@ func runDebugMode() {
 }
 
 /// Test hiding notification windows using CGSSetWindowAlpha
+/// Applies an exported settings file without starting the menu bar app.
+func importSettings(fromPath path: String) {
+    let exportData: Settings.ExportData
+    do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        exportData = try Settings.decodeLocalConfig(data)
+    } catch {
+        print("Could not import \(path): \(error)")
+        exit(1)
+    }
+
+    Settings.shared.apply(exportData, includeLaunchAtLogin: false)
+    // Flush to cfprefsd before the process exits.
+    CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
+    print("Imported \(exportData.styles.count) styles and \(exportData.rules.count) rules from \(path)")
+}
+
 func testHideNotifications() {
     print("=== Testing Notification Window Hiding ===\n")
 

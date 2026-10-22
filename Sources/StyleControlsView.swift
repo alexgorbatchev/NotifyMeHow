@@ -438,7 +438,7 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         // Load custom icon
         customIconPath = style.customIconPath
         if let path = customIconPath, !path.isEmpty {
-            iconImageView.image = NSImage(contentsOfFile: path)
+            iconImageView.image = NSImage(contentsOfFile: NotificationStyle.resolvedImagePath(path))
         } else {
             iconImageView.image = nil
         }
@@ -446,7 +446,7 @@ class StyleControlsView: NSView, NSTextFieldDelegate {
         // Load background image
         backgroundImagePath = style.backgroundImagePath
         if let path = backgroundImagePath, !path.isEmpty {
-            bgImageView.image = NSImage(contentsOfFile: path)
+            bgImageView.image = NSImage(contentsOfFile: NotificationStyle.resolvedImagePath(path))
         } else {
             bgImageView.image = nil
         }

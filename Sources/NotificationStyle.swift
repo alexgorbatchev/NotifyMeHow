@@ -109,12 +109,13 @@ struct NotificationStyle: Codable, Identifiable {
         config.bodyColor = colorFromHex(bodyColorHex)
 
         // Load custom icon if path is set and valid
-        if let iconPath = customIconPath, !iconPath.isEmpty, isValidImagePath(iconPath) {
+        if let iconPath = customIconPath.map(Self.resolvedImagePath), !iconPath.isEmpty, isValidImagePath(iconPath) {
             config.customIcon = NSImage(contentsOfFile: iconPath)
         }
 
         // Load background image if path is set and valid
-        if let bgImagePath = backgroundImagePath, !bgImagePath.isEmpty, isValidImagePath(bgImagePath) {
+        if let bgImagePath = backgroundImagePath.map(Self.resolvedImagePath), !bgImagePath.isEmpty,
+           isValidImagePath(bgImagePath) {
             config.backgroundImage = NSImage(contentsOfFile: bgImagePath)
         }
 
@@ -136,6 +137,11 @@ struct NotificationStyle: Codable, Identifiable {
         config.hasShadow = hasShadow
 
         return config
+    }
+
+    /// Expands a leading `~` so image paths in shared configs need no user-specific home directory.
+    static func resolvedImagePath(_ path: String) -> String {
+        return (path as NSString).expandingTildeInPath
     }
 
     /// Validate that a path points to a readable image file

@@ -360,29 +360,36 @@ class Settings {
         return try? encoder.encode(exportData)
     }
 
+    /// Decodes a checked-in local config, which must use the export format.
+    static func decodeLocalConfig(_ data: Data) throws -> ExportData {
+        return try JSONDecoder().decode(ExportData.self, from: data)
+    }
+
+    /// Applies exported settings, styles, and rules. `includeLaunchAtLogin` is false for
+    /// local configs because it registers or unregisters the running binary as a login item.
+    func apply(_ exportData: ExportData, includeLaunchAtLogin: Bool) {
+        if let corner = NotificationPosition.Corner(rawValue: exportData.settings.positionCorner) {
+            positionCorner = corner
+        }
+        positionOffsetX = CGFloat(exportData.settings.positionOffsetX)
+        positionOffsetY = CGFloat(exportData.settings.positionOffsetY)
+        scaleFactor = CGFloat(exportData.settings.scaleFactor)
+        autoStartMonitoring = exportData.settings.autoStartMonitoring
+        if includeLaunchAtLogin {
+            launchAtLogin = exportData.settings.launchAtLogin
+        }
+
+        // Import styles and rules (replace all)
+        StylesManager.shared.replaceAllStyles(exportData.styles)
+        RulesManager.shared.replaceAllRules(exportData.rules)
+        RulesManager.shared.defaultBehavior = exportData.defaultBehavior == "noCustom" ? .noCustom : .showCustom
+    }
+
     /// Import all settings, styles, and rules from JSON data
     func importFromJSON(_ data: Data) -> Bool {
-        let decoder = JSONDecoder()
-
         // Try new format first
-        if let exportData = try? decoder.decode(ExportData.self, from: data) {
-            // Import settings
-            if let corner = NotificationPosition.Corner(rawValue: exportData.settings.positionCorner) {
-                positionCorner = corner
-            }
-            positionOffsetX = CGFloat(exportData.settings.positionOffsetX)
-            positionOffsetY = CGFloat(exportData.settings.positionOffsetY)
-            scaleFactor = CGFloat(exportData.settings.scaleFactor)
-            autoStartMonitoring = exportData.settings.autoStartMonitoring
-            launchAtLogin = exportData.settings.launchAtLogin
-
-            // Import styles (replace all)
-            StylesManager.shared.replaceAllStyles(exportData.styles)
-
-            // Import rules (replace all)
-            RulesManager.shared.replaceAllRules(exportData.rules)
-            RulesManager.shared.defaultBehavior = exportData.defaultBehavior == "noCustom" ? .noCustom : .showCustom
-
+        if let exportData = try? Settings.decodeLocalConfig(data) {
+            apply(exportData, includeLaunchAtLogin: true)
             return true
         }
 
